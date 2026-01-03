@@ -1,0 +1,26 @@
+{
+  "name": "dbz-physics-game",
+  "version": "0.1.0",
+  "description": "Dragon Ball-inspired 2D local multiplayer fighting game built with Phaser 3 and Matter.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "phaser",
+    "matter.js",
+    "fighting-game",
+    "multiplayer",
+    "dragon-ball"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "phaser": "^3.70.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
