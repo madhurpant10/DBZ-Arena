@@ -8,7 +8,9 @@ import Phaser from 'phaser';
 export const PLAYER_1_CONTROLS = {
   left: Phaser.Input.Keyboard.KeyCodes.A,
   right: Phaser.Input.Keyboard.KeyCodes.D,
-  jump: Phaser.Input.Keyboard.KeyCodes.W,
+  up: Phaser.Input.Keyboard.KeyCodes.W, // Used for flight thrust up and auto-flight activation
+  down: Phaser.Input.Keyboard.KeyCodes.S, // Used for flight thrust down
+  jump: Phaser.Input.Keyboard.KeyCodes.W, // Jump (same as up - contextual)
   attack: Phaser.Input.Keyboard.KeyCodes.F,
   special: Phaser.Input.Keyboard.KeyCodes.G, // Future: special attack
 };
@@ -16,7 +18,9 @@ export const PLAYER_1_CONTROLS = {
 export const PLAYER_2_CONTROLS = {
   left: Phaser.Input.Keyboard.KeyCodes.LEFT,
   right: Phaser.Input.Keyboard.KeyCodes.RIGHT,
-  jump: Phaser.Input.Keyboard.KeyCodes.UP,
+  up: Phaser.Input.Keyboard.KeyCodes.UP, // Used for flight thrust up and auto-flight activation
+  down: Phaser.Input.Keyboard.KeyCodes.DOWN, // Used for flight thrust down
+  jump: Phaser.Input.Keyboard.KeyCodes.UP, // Jump (same as up - contextual)
   attack: Phaser.Input.Keyboard.KeyCodes.L,
   special: Phaser.Input.Keyboard.KeyCodes.K, // Future: special attack
 };

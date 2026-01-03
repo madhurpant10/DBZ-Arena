@@ -44,6 +44,19 @@ export const PLAYER_MOVEMENT = {
   // Ground detection
   groundSensorHeight: 5,
   groundSensorWidth: 40,
+  // Maximum fall velocity (prevents terminal velocity issues)
+  maxFallVelocity: 15,
+};
+
+/**
+ * Flight physics
+ * Physics modifications applied when player is in FLYING state
+ */
+export const FLIGHT_PHYSICS = {
+  // Base air friction is multiplied by this during flight for stability
+  frictionAirFlying: 0.05, // Higher air drag during flight
+  // Normal air friction when not flying
+  frictionAirNormal: 0.02,
 };
 
 /**
@@ -82,8 +95,8 @@ export const COMBAT_PHYSICS = {
  * Ground/Platform physics
  */
 export const GROUND = {
-  friction: 0.8,
-  frictionStatic: 1.0,
+  friction: 0.1, // Low friction for smooth movement
+  frictionStatic: 0.2, // Low static friction to prevent sticking
   restitution: 0,
   collisionCategory: 0x0004,
 };

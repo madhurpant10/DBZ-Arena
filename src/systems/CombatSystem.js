@@ -159,6 +159,7 @@ export default class CombatSystem {
 
   /**
    * Applies damage and knockback from projectile hit
+   * Now fully 2D-aware - knockback follows projectile direction
    * @param {Projectile} projectile - The projectile that hit
    * @param {Player} target - The player that was hit
    */
@@ -173,17 +174,25 @@ export default class CombatSystem {
     // Apply damage
     target.takeDamage(projectile.damage);
 
-    // Calculate knockback direction
-    const knockbackDirection = projectile.direction;
-    const knockbackAngleRad = (COMBAT_PHYSICS.knockbackAngle * Math.PI) / 180;
+    // Get projectile's travel direction (normalized vector)
+    const projDir = projectile.getDirection();
 
     // Calculate knockback force with damage scaling
     const damageMultiplier = 1 + target.damageTaken * COMBAT.knockbackScaling;
     const knockbackMagnitude = COMBAT_PHYSICS.knockbackForce * damageMultiplier;
 
+    // Base knockback is in the direction the projectile was traveling
+    // We add an upward component to prevent targets from being driven into the ground
+    const upwardBias = -0.4; // Slight upward deflection
+
+    // Normalize the combined direction
+    const dirX = projDir.x;
+    const dirY = projDir.y + upwardBias;
+    const dirMag = Math.sqrt(dirX * dirX + dirY * dirY);
+
     const knockbackForce = {
-      x: Math.cos(knockbackAngleRad) * knockbackMagnitude * knockbackDirection,
-      y: Math.sin(knockbackAngleRad) * knockbackMagnitude,
+      x: (dirX / dirMag) * knockbackMagnitude,
+      y: (dirY / dirMag) * knockbackMagnitude,
     };
 
     // Apply knockback

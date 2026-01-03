@@ -35,6 +35,14 @@ class DebugManager {
   }
 
   /**
+   * Check if debug mode is enabled
+   * @returns {boolean}
+   */
+  isEnabled() {
+    return this.enabled;
+  }
+
+  /**
    * Toggle physics debug rendering
    * @param {Phaser.Scene} scene - The scene containing matter physics
    */

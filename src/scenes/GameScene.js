@@ -4,7 +4,7 @@ import PhysicsSystem from '../systems/PhysicsSystem.js';
 import CombatSystem from '../systems/CombatSystem.js';
 import Player from '../entities/Player.js';
 import Projectile from '../entities/Projectile.js';
-import { ARENA, UI, PLAYER_STATS } from '../constants/gameBalance.js';
+import { ARENA, UI, PLAYER_STATS, PLAYER_STATES } from '../constants/gameBalance.js';
 import { DEBUG_CONTROLS } from '../constants/controls.js';
 import { debug, logInfo } from '../utils/debug.js';
 
@@ -27,6 +27,9 @@ export default class GameScene extends Phaser.Scene {
     // UI elements
     this.hudElements = {};
 
+    // Debug display elements
+    this.debugTexts = null;
+
     // Game state
     this.isPaused = false;
     this.gameMode = 'local1v1';
@@ -48,6 +51,7 @@ export default class GameScene extends Phaser.Scene {
     this.pauseOverlay = null;
     this.pauseText = null;
     this.pauseHint = null;
+    this.debugTexts = null;
 
     this.gameMode = data.mode || 'local1v1';
     logInfo(`GameScene: Initializing with mode "${this.gameMode}"`);
@@ -94,6 +98,16 @@ export default class GameScene extends Phaser.Scene {
       console.log('7. Initializing debug...');
       debug.init(this);
       console.log('   Debug OK');
+
+      // Setup camera
+      console.log('8. Setting up camera...');
+      this.setupCamera();
+      console.log('   Camera OK');
+
+      // Create debug display
+      console.log('9. Creating debug display...');
+      this.createDebugDisplay();
+      console.log('   Debug display OK');
 
       logInfo('GameScene: Created');
       console.log('GameScene.create() completed successfully!');
@@ -148,6 +162,134 @@ export default class GameScene extends Phaser.Scene {
 
     // Set depth to be behind everything
     bg.setDepth(-100);
+  }
+
+  /**
+   * Sets up camera to follow players during flight
+   * Camera smoothly follows the midpoint between both players
+   */
+  setupCamera() {
+    const camera = this.cameras.main;
+    const { width, height } = camera;
+
+    // Set camera bounds to be slightly larger than arena for flight
+    // This allows the camera to pan up when players fly
+    const extraHeight = 400; // Extra space above for flight
+    camera.setBounds(0, -extraHeight, width, height + extraHeight);
+
+    // Disable default follow, we'll manually update camera position
+    // to keep both players in view
+  }
+
+  /**
+   * Updates camera position to keep both players visible
+   * Called every frame in update()
+   */
+  updateCamera() {
+    if (this.players.length < 2) return;
+
+    const p1Pos = this.players[0].getPosition();
+    const p2Pos = this.players[1].getPosition();
+
+    // Calculate midpoint between players
+    const midX = (p1Pos.x + p2Pos.x) / 2;
+    const midY = (p1Pos.y + p2Pos.y) / 2;
+
+    const camera = this.cameras.main;
+    const { width, height } = camera;
+
+    // Calculate target Y position (only move camera when players are high up)
+    // Camera centers on players when they're above a threshold
+    const groundY = height - ARENA.groundHeight;
+    const flightThreshold = groundY - 200; // Start following when above this Y
+
+    let targetY = height / 2; // Default center
+
+    // If either player is flying high, adjust camera Y
+    const minPlayerY = Math.min(p1Pos.y, p2Pos.y);
+    if (minPlayerY < flightThreshold) {
+      // Blend between default and following the midpoint
+      const followStrength = Math.min(1, (flightThreshold - minPlayerY) / 200);
+      targetY = height / 2 + (midY - height / 2) * followStrength * 0.5;
+    }
+
+    // Smoothly move camera (lerp)
+    const currentY = camera.scrollY + height / 2;
+    const lerpSpeed = 0.05;
+    const newY = currentY + (targetY - currentY) * lerpSpeed;
+
+    // Clamp to bounds
+    const minY = -200; // Don't go too high
+    const maxY = height / 2; // Don't go below default
+    camera.scrollY = Math.max(minY, Math.min(maxY, newY - height / 2));
+  }
+
+  /**
+   * Creates debug display for player states (shown when debug mode is on)
+   */
+  createDebugDisplay() {
+    const { width } = this.cameras.main;
+
+    // Create container for debug info
+    this.debugTexts = {
+      p1: this.add.text(10, 100, '', {
+        fontSize: '12px',
+        fontFamily: 'Consolas, monospace',
+        color: '#00ff00',
+        backgroundColor: '#000000',
+        padding: { x: 5, y: 5 },
+      }),
+      p2: this.add.text(width - 200, 100, '', {
+        fontSize: '12px',
+        fontFamily: 'Consolas, monospace',
+        color: '#00ff00',
+        backgroundColor: '#000000',
+        padding: { x: 5, y: 5 },
+      }),
+    };
+
+    // Set depth and initial visibility
+    this.debugTexts.p1.setDepth(1000);
+    this.debugTexts.p2.setDepth(1000);
+    this.debugTexts.p1.setScrollFactor(0); // Fixed to camera
+    this.debugTexts.p2.setScrollFactor(0);
+    this.debugTexts.p1.setVisible(false);
+    this.debugTexts.p2.setVisible(false);
+  }
+
+  /**
+   * Updates debug display with current player info
+   */
+  updateDebugDisplay() {
+    // Only show when debug mode is enabled
+    const isDebugOn = debug.isEnabled();
+
+    this.debugTexts.p1.setVisible(isDebugOn);
+    this.debugTexts.p2.setVisible(isDebugOn);
+
+    if (!isDebugOn) return;
+
+    // Update player debug info
+    this.players.forEach((player, index) => {
+      const pos = player.getPosition();
+      const vel = player.getVelocity();
+      const state = player.getState();
+      const energy = Math.round(player.energy);
+      const health = Math.round(player.health);
+
+      const info = [
+        `P${player.playerNumber} Debug:`,
+        `State: ${state}`,
+        `Pos: (${Math.round(pos.x)}, ${Math.round(pos.y)})`,
+        `Vel: (${vel.x.toFixed(1)}, ${vel.y.toFixed(1)})`,
+        `HP: ${health} | Ki: ${energy}`,
+        `Flying: ${player.isFlying() ? 'YES' : 'NO'}`,
+        `Jumps: ${player.jumpsRemaining}`,
+      ].join('\n');
+
+      const debugText = index === 0 ? this.debugTexts.p1 : this.debugTexts.p2;
+      debugText.setText(info);
+    });
   }
 
   /**
@@ -439,7 +581,7 @@ export default class GameScene extends Phaser.Scene {
     // Process player input and update
     this.players.forEach((player) => {
       if (player && player.body) {
-        this.processPlayerInput(player);
+        this.processPlayerInput(player, delta);
         player.update(time, delta);
       }
     });
@@ -451,24 +593,57 @@ export default class GameScene extends Phaser.Scene {
     this.updatePlayerHUD(1);
     this.updatePlayerHUD(2);
 
+    // Update camera to follow players during flight
+    this.updateCamera();
+
+    // Update debug display
+    this.updateDebugDisplay();
+
     // Clear debug graphics
     debug.clear();
   }
 
   /**
    * Processes input for a player
+   * Handles movement, jumping, flight, and attacks
+   *
+   * Flight activation: When airborne with no jumps remaining,
+   * holding UP/W will automatically enter flight mode.
+   * Landing exits flight mode automatically.
+   *
    * @param {Player} player - The player to process
+   * @param {number} delta - Delta time for frame-rate independent updates
    */
-  processPlayerInput(player) {
+  processPlayerInput(player, delta) {
     const input = this.inputSystem.getInput(player.playerNumber);
     if (!input) return;
 
-    // Horizontal movement
+    // Get directional inputs
     const horizontal = this.inputSystem.getHorizontalInput(player.playerNumber);
-    player.move(horizontal);
+    const vertical = this.inputSystem.getVerticalInput(player.playerNumber);
 
-    // Jump (on button press, not hold)
-    if (input.jumpPressed) {
+    // Handle flight - auto-activate when holding UP with no jumps left
+    if (player.isFlying()) {
+      // Currently flying - apply thrust and consume energy
+      player.applyFlightThrust(horizontal, vertical);
+      player.consumeFlightEnergy(delta);
+
+      // Exit flight if player releases UP key
+      if (!input.up) {
+        player.exitFlight();
+      }
+    } else if (input.up && player.getState() === PLAYER_STATES.AIRBORNE && player.jumpsRemaining <= 0) {
+      // Not flying, but holding UP with no jumps left - enter flight
+      player.enterFlight();
+    }
+
+    // Horizontal movement (works in all states except flying which uses thrust)
+    if (!player.isFlying()) {
+      player.move(horizontal);
+    }
+
+    // Jump (on button press, not hold) - doesn't work while flying
+    if (input.jumpPressed && !player.isFlying()) {
       player.jump();
     }
 
@@ -479,13 +654,43 @@ export default class GameScene extends Phaser.Scene {
   }
 
   /**
+   * Gets the opponent player for a given player
+   * @param {Player} player - The player to find opponent for
+   * @returns {Player|null} The opponent player or null
+   */
+  getOpponent(player) {
+    const opponentNumber = player.playerNumber === 1 ? 2 : 1;
+    return this.players[opponentNumber - 1] || null;
+  }
+
+  /**
    * Handles player attack action
+   * Projectiles aim toward opponent ONLY if player is facing them
+   * Otherwise shoots in facing direction
    * @param {Player} player - The attacking player
    */
   handlePlayerAttack(player) {
     const pos = player.getPosition();
+    const opponent = this.getOpponent(player);
 
-    // Create projectile factory
+    // Get opponent position for targeting (only if facing toward them)
+    let targetPos = null;
+    if (opponent && opponent.getState() !== 'DEAD') {
+      const opponentPos = opponent.getPosition();
+
+      // Check if player is facing toward the opponent
+      const directionToOpponent = opponentPos.x - pos.x; // positive = opponent is to the right
+      const isFacingOpponent =
+        (player.facingDirection > 0 && directionToOpponent > 0) || // facing right, opponent is right
+        (player.facingDirection < 0 && directionToOpponent < 0); // facing left, opponent is left
+
+      // Only auto-aim if facing the opponent
+      if (isFacingOpponent) {
+        targetPos = opponentPos;
+      }
+    }
+
+    // Create projectile factory with targeting
     const createProjectile = () => {
       return new Projectile(
         this,
@@ -493,7 +698,8 @@ export default class GameScene extends Phaser.Scene {
         player.playerNumber,
         pos.x + player.facingDirection * 40, // Spawn in front of player
         pos.y,
-        player.facingDirection
+        targetPos, // Target opponent's position (null if not facing them)
+        player.facingDirection // Fallback direction if no target
       );
     };
 
@@ -527,6 +733,13 @@ export default class GameScene extends Phaser.Scene {
 
     // Destroy debug
     debug.destroy();
+
+    // Destroy debug texts
+    if (this.debugTexts) {
+      this.debugTexts.p1?.destroy();
+      this.debugTexts.p2?.destroy();
+      this.debugTexts = null;
+    }
 
     // Remove event listeners
     this.events.off('playerKO', this.handlePlayerKO, this);

@@ -27,6 +27,8 @@ export default class InputSystem {
     const keys = this.scene.input.keyboard.addKeys({
       left: controls.left,
       right: controls.right,
+      up: controls.up,
+      down: controls.down,
       jump: controls.jump,
       attack: controls.attack,
       special: controls.special,
@@ -39,6 +41,8 @@ export default class InputSystem {
       // Current frame state
       left: false,
       right: false,
+      up: false,
+      down: false,
       jump: false,
       attack: false,
       special: false,
@@ -69,6 +73,8 @@ export default class InputSystem {
       // Remove key listeners
       this.scene.input.keyboard.removeKey(inputState.keys.left);
       this.scene.input.keyboard.removeKey(inputState.keys.right);
+      this.scene.input.keyboard.removeKey(inputState.keys.up);
+      this.scene.input.keyboard.removeKey(inputState.keys.down);
       this.scene.input.keyboard.removeKey(inputState.keys.jump);
       this.scene.input.keyboard.removeKey(inputState.keys.attack);
       this.scene.input.keyboard.removeKey(inputState.keys.special);
@@ -104,6 +110,8 @@ export default class InputSystem {
     // Update current state from keys
     inputState.left = keys.left.isDown;
     inputState.right = keys.right.isDown;
+    inputState.up = keys.up.isDown;
+    inputState.down = keys.down.isDown;
     inputState.jump = keys.jump.isDown;
     inputState.attack = keys.attack.isDown;
     inputState.special = keys.special.isDown;
@@ -136,6 +144,21 @@ export default class InputSystem {
     if (input.left) horizontal -= 1;
     if (input.right) horizontal += 1;
     return horizontal;
+  }
+
+  /**
+   * Gets vertical input as a value between -1 and 1
+   * @param {number} playerNumber
+   * @returns {number} -1 (up), 0 (none), or 1 (down)
+   */
+  getVerticalInput(playerNumber) {
+    const input = this.getInput(playerNumber);
+    if (!input) return 0;
+
+    let vertical = 0;
+    if (input.up) vertical -= 1; // Up is negative in screen coords
+    if (input.down) vertical += 1;
+    return vertical;
   }
 
   /**
