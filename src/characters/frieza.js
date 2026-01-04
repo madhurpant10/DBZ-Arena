@@ -48,9 +48,10 @@ const frieza = createCharacter({
   projectileLifetimeMultiplier: 1.4, // 40% longer range
   projectileSizeMultiplier: 0.9, // Slightly smaller but faster
 
-  // Energy - Fast recovery for zoning
+  // Energy - Fast recovery for zoning, very cheap projectiles
   energyRegenMultiplier: 1.2, // 20% faster regen
   energyRegenDelayMultiplier: 0.85, // 15% shorter delay
+  attackEnergyCostMultiplier: 0.7, // 30% cheaper attacks - spam king for zoning
 
   // Display Stats (1-5)
   displaySpeed: 4,

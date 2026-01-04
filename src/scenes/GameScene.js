@@ -388,37 +388,70 @@ export default class GameScene extends Phaser.Scene {
       fontSize: '18px',
       fontFamily: 'Arial Black, Arial, sans-serif',
       color: colorHex,
+      stroke: '#000000',
+      strokeThickness: 2,
     });
     container.add(label);
 
-    // Health bar background
+    // Health bar outer border (dark)
+    const healthBarBorder = this.add.graphics();
+    healthBarBorder.fillStyle(0x000000, 1);
+    healthBarBorder.fillRoundedRect(-2, 28, UI.healthBarWidth + 4, UI.healthBarHeight + 4, 4);
+    container.add(healthBarBorder);
+
+    // Health bar background (dark gradient feel)
     const healthBarBg = this.add.graphics();
-    healthBarBg.fillStyle(0x222222, 1);
-    healthBarBg.fillRect(0, 30, UI.healthBarWidth, UI.healthBarHeight);
+    healthBarBg.fillStyle(0x1a1a1a, 1);
+    healthBarBg.fillRoundedRect(0, 30, UI.healthBarWidth, UI.healthBarHeight, 3);
+    // Inner shadow
+    healthBarBg.fillStyle(0x333333, 1);
+    healthBarBg.fillRoundedRect(0, 30, UI.healthBarWidth, UI.healthBarHeight / 2, { tl: 3, tr: 3, bl: 0, br: 0 });
     container.add(healthBarBg);
 
     // Health bar fill
     const healthBar = this.add.graphics();
     container.add(healthBar);
 
-    // Health text
+    // Health text with shadow
     const healthText = this.add.text(UI.healthBarWidth / 2, 30 + UI.healthBarHeight / 2, '100', {
-      fontSize: '16px',
-      fontFamily: 'Arial, sans-serif',
+      fontSize: '14px',
+      fontFamily: 'Arial Black, Arial, sans-serif',
       color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 3,
     });
     healthText.setOrigin(0.5);
     container.add(healthText);
 
+    // Ki/Energy bar outer border
+    const energyBarBorder = this.add.graphics();
+    energyBarBorder.fillStyle(0x000000, 1);
+    energyBarBorder.fillRoundedRect(-2, 58, UI.energyBarWidth + 4, UI.energyBarHeight + 4, 3);
+    container.add(energyBarBorder);
+
     // Energy bar background
     const energyBarBg = this.add.graphics();
-    energyBarBg.fillStyle(0x222222, 1);
-    energyBarBg.fillRect(0, 60, UI.energyBarWidth, UI.energyBarHeight);
+    energyBarBg.fillStyle(0x1a1a1a, 1);
+    energyBarBg.fillRoundedRect(0, 60, UI.energyBarWidth, UI.energyBarHeight, 2);
+    // Inner highlight
+    energyBarBg.fillStyle(0x2a2a2a, 1);
+    energyBarBg.fillRoundedRect(0, 60, UI.energyBarWidth, UI.energyBarHeight / 2, { tl: 2, tr: 2, bl: 0, br: 0 });
     container.add(energyBarBg);
 
     // Energy bar fill
     const energyBar = this.add.graphics();
     container.add(energyBar);
+
+    // Ki label
+    const kiLabel = this.add.text(UI.energyBarWidth + 8, 60 + UI.energyBarHeight / 2, 'KI', {
+      fontSize: '12px',
+      fontFamily: 'Arial Black, Arial, sans-serif',
+      color: '#4ecdc4',
+      stroke: '#000000',
+      strokeThickness: 2,
+    });
+    kiLabel.setOrigin(0, 0.5);
+    container.add(kiLabel);
 
     container.setDepth(100);
 
@@ -445,19 +478,53 @@ export default class GameScene extends Phaser.Scene {
     const healthPercent = player.health / stats.maxHealth;
     const energyPercent = player.energy / stats.maxEnergy;
 
-    // Update health bar
+    // Update health bar with gradient effect
     hud.healthBar.clear();
-    const healthColor = healthPercent > 0.5 ? 0x27ae60 : healthPercent > 0.25 ? 0xf39c12 : 0xe74c3c;
-    hud.healthBar.fillStyle(healthColor, 1);
-    hud.healthBar.fillRect(0, 30, UI.healthBarWidth * healthPercent, UI.healthBarHeight);
+    const healthWidth = Math.max(0, UI.healthBarWidth * healthPercent);
+
+    if (healthWidth > 0) {
+      // Health color based on percentage - vibrant colors
+      let healthColor, healthColorDark;
+      if (healthPercent > 0.5) {
+        healthColor = 0x2ecc71; // Bright green
+        healthColorDark = 0x27ae60; // Darker green
+      } else if (healthPercent > 0.25) {
+        healthColor = 0xf39c12; // Orange
+        healthColorDark = 0xe67e22; // Darker orange
+      } else {
+        healthColor = 0xe74c3c; // Red
+        healthColorDark = 0xc0392b; // Darker red
+      }
+
+      // Main bar fill
+      hud.healthBar.fillStyle(healthColor, 1);
+      hud.healthBar.fillRoundedRect(0, 30, healthWidth, UI.healthBarHeight, 3);
+
+      // Highlight on top half for 3D effect
+      hud.healthBar.fillStyle(0xffffff, 0.2);
+      hud.healthBar.fillRoundedRect(0, 30, healthWidth, UI.healthBarHeight / 2, { tl: 3, tr: 3, bl: 0, br: 0 });
+    }
 
     // Update health text
     hud.healthText.setText(Math.ceil(player.health).toString());
 
-    // Update energy bar
+    // Update energy/ki bar with cyan/blue glow
     hud.energyBar.clear();
-    hud.energyBar.fillStyle(0x3498db, 1);
-    hud.energyBar.fillRect(0, 60, UI.energyBarWidth * energyPercent, UI.energyBarHeight);
+    const energyWidth = Math.max(0, UI.energyBarWidth * energyPercent);
+
+    if (energyWidth > 0) {
+      // Ki bar - cyan/teal color with glow effect
+      hud.energyBar.fillStyle(0x00bcd4, 1); // Cyan
+      hud.energyBar.fillRoundedRect(0, 60, energyWidth, UI.energyBarHeight, 2);
+
+      // Highlight for glow effect
+      hud.energyBar.fillStyle(0x4dd0e1, 1); // Lighter cyan
+      hud.energyBar.fillRoundedRect(0, 60, energyWidth, UI.energyBarHeight / 2, { tl: 2, tr: 2, bl: 0, br: 0 });
+
+      // Bright center line for energy feel
+      hud.energyBar.fillStyle(0xffffff, 0.4);
+      hud.energyBar.fillRect(0, 60 + UI.energyBarHeight / 3, energyWidth, 2);
+    }
   }
 
   /**
@@ -597,7 +664,10 @@ export default class GameScene extends Phaser.Scene {
     this.players.forEach((player) => {
       if (player && player.body) {
         this.processPlayerInput(player, delta);
-        player.update(time, delta);
+        // Pass down key state to player for flight gravity control
+        const input = this.inputSystem.getInput(player.playerNumber);
+        const isPressingDown = input ? input.down : false;
+        player.update(time, delta, isPressingDown);
       }
     });
 
@@ -643,8 +713,8 @@ export default class GameScene extends Phaser.Scene {
       player.applyFlightThrust(horizontal, vertical);
       player.consumeFlightEnergy(delta);
 
-      // Exit flight if player releases UP key
-      if (!input.up) {
+      // Exit flight only if NEITHER up nor down is pressed (player wants to fall naturally)
+      if (!input.up && !input.down) {
         player.exitFlight();
       }
     } else if (input.up && player.getState() === PLAYER_STATES.AIRBORNE && player.jumpsRemaining <= 0) {

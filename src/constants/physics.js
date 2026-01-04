@@ -7,7 +7,7 @@
  * World physics settings
  */
 export const WORLD = {
-  gravity: { x: 0, y: 1.5 },
+  gravity: { x: 0, y: 1.0 }, // Reduced from 1.5 for more floaty feel
   bounds: {
     // Arena bounds (will be set based on game dimensions)
     padding: 50,

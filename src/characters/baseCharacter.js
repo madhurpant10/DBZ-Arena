@@ -196,6 +196,14 @@ export const BASE_CHARACTER = {
    */
   energyRegenDelayMultiplier: 1.0,
 
+  /**
+   * Attack energy cost multiplier
+   * Range: 0.5-1.5 (1.0 is baseline)
+   * Lower = cheaper attacks (can spam more)
+   * @type {number}
+   */
+  attackEnergyCostMultiplier: 1.0,
+
   // ==================== DISPLAY STATS (for UI) ====================
   // These are simplified 1-5 star ratings for the character select screen
 

@@ -48,9 +48,10 @@ const goku = createCharacter({
   projectileLifetimeMultiplier: 1.0,
   projectileSizeMultiplier: 1.0,
 
-  // Energy - Good regeneration
+  // Energy - Good regeneration, efficient attacks
   energyRegenMultiplier: 1.1, // 10% faster regen
   energyRegenDelayMultiplier: 0.9, // 10% shorter delay
+  attackEnergyCostMultiplier: 0.85, // 15% cheaper attacks - can spam more
 
   // Display Stats (1-5)
   displaySpeed: 5,

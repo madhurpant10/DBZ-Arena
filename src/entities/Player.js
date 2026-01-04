@@ -101,6 +101,7 @@ export default class Player {
       energyRegenRate: PLAYER_STATS.energyRegenRate * char.energyRegenMultiplier,
       energyRegenRateAir: PLAYER_STATS.energyRegenRateAir * char.energyRegenMultiplier,
       energyRegenDelay: PLAYER_STATS.energyRegenDelay * char.energyRegenDelayMultiplier,
+      attackEnergyCost: COMBAT.basicAttackEnergyCost * char.attackEnergyCostMultiplier,
 
       // Projectile stats (stored for use by CombatSystem)
       projectileSpeedMultiplier: char.projectileSpeedMultiplier,
@@ -379,10 +380,12 @@ export default class Player {
    * Updates flight-related gravity scaling
    * Called every frame during flight
    * Uses character-specific gravity counter
+   * @param {boolean} isPressingDown - Whether player is pressing down key
    */
-  updateFlightGravity() {
-    if (this.isFlying()) {
+  updateFlightGravity(isPressingDown = false) {
+    if (this.isFlying() && !isPressingDown) {
       // Apply reduced gravity effect using character-specific value
+      // Only when NOT pressing down - allows controlled descent
       this.physics.applyForce(this.body, { x: 0, y: -this.stats.flightGravityCounter });
     }
   }
@@ -480,7 +483,7 @@ export default class Player {
 
   /**
    * Regenerates energy over time
-   * Rate varies based on state (slower in air/flight)
+   * Rate varies based on state (slower in air but still regenerates)
    * Uses character-specific regeneration rates
    * @param {number} delta - Delta time in ms
    */
@@ -496,6 +499,7 @@ export default class Player {
     }
 
     // Determine regen rate based on state using character-specific values
+    // Energy regens in ALL non-flying states, just slower when airborne
     const regenRate = this.state === PLAYER_STATES.GROUNDED
       ? this.stats.energyRegenRate
       : this.stats.energyRegenRateAir;
@@ -541,8 +545,9 @@ export default class Player {
    * Handles state transitions based on physics conditions
    * @param {number} time - Current time
    * @param {number} delta - Delta time
+   * @param {boolean} isPressingDown - Whether player is pressing down key
    */
-  update(time, delta) {
+  update(time, delta, isPressingDown = false) {
     // Skip update if dead
     if (this.state === PLAYER_STATES.DEAD) {
       this.updateVisuals();
@@ -566,8 +571,8 @@ export default class Player {
       this.physics.setVelocityY(this.body, PLAYER_MOVEMENT.maxFallVelocity);
     }
 
-    // Update flight gravity compensation
-    this.updateFlightGravity();
+    // Update flight gravity compensation (disabled when pressing down for controlled descent)
+    this.updateFlightGravity(isPressingDown);
 
     // Regenerate energy
     this.regenerateEnergy(delta);

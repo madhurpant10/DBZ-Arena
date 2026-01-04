@@ -48,9 +48,10 @@ const piccolo = createCharacter({
   projectileLifetimeMultiplier: 1.1, // 10% longer range
   projectileSizeMultiplier: 1.1, // 10% larger hitbox
 
-  // Energy - Excellent regeneration
+  // Energy - Excellent regeneration, standard attack cost
   energyRegenMultiplier: 1.4, // 40% faster regen (best in game)
   energyRegenDelayMultiplier: 0.8, // 20% shorter delay
+  attackEnergyCostMultiplier: 1.0, // Standard cost - relies on regen advantage
 
   // Display Stats (1-5)
   displaySpeed: 2,

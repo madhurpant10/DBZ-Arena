@@ -48,9 +48,10 @@ const vegeta = createCharacter({
   projectileLifetimeMultiplier: 1.0,
   projectileSizeMultiplier: 1.05, // Slightly larger projectiles
 
-  // Energy - Standard
+  // Energy - Standard regen, higher attack cost (power over volume)
   energyRegenMultiplier: 1.0,
   energyRegenDelayMultiplier: 1.0,
+  attackEnergyCostMultiplier: 1.15, // 15% more expensive attacks - fewer but stronger
 
   // Display Stats (1-5)
   displaySpeed: 3,

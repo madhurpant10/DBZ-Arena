@@ -21,9 +21,9 @@ export const PLAYER_STATES = {
 export const PLAYER_STATS = {
   maxHealth: 100,
   maxEnergy: 100, // Ki/energy for special moves
-  energyRegenRate: 0.5, // Energy per frame (normalized to 60fps)
-  energyRegenDelay: 1000, // Milliseconds after using energy before regen starts
-  energyRegenRateAir: 0.2, // Slower regen while airborne/flying
+  energyRegenRate: 0.08, // Energy per frame (normalized to 60fps) - slow regen, ~20 sec to full
+  energyRegenDelay: 500, // Milliseconds after using energy before regen starts
+  energyRegenRateAir: 0.05, // Slower regen while airborne
 };
 
 /**
@@ -32,8 +32,8 @@ export const PLAYER_STATS = {
 export const COMBAT = {
   // Basic attack
   basicAttackDamage: 10,
-  basicAttackCooldown: 500, // Milliseconds between attacks
-  basicAttackEnergyCost: 0,
+  basicAttackCooldown: 250, // Milliseconds between attacks (faster combat)
+  basicAttackEnergyCost: 8, // Ki cost per attack - prevents spamming
   // Knockback scaling (damage multiplier for knockback)
   knockbackScaling: 0.01,
   // Invincibility frames after being hit
@@ -45,8 +45,8 @@ export const COMBAT = {
  */
 export const PROJECTILE = {
   damage: 10,
-  energyCost: 0, // Basic projectile is free for now
-  cooldown: 500, // Milliseconds
+  energyCost: 8, // Ki cost per projectile - same as basic attack
+  cooldown: 250, // Milliseconds (faster to match attack cooldown)
 };
 
 /**
@@ -80,15 +80,15 @@ export const ARENA = {
  */
 export const FLIGHT = {
   // Energy consumption
-  // 0.055 allows ~30 seconds of flight from full energy (100 / 30 / 60 ≈ 0.055)
-  energyDrainRate: 0.055, // Energy per frame while flying (normalized to 60fps)
+  // 0.083 allows ~20 seconds of flight from full energy (100 / 20 / 60 ≈ 0.083)
+  energyDrainRate: 0.083, // Energy per frame while flying (normalized to 60fps)
   minEnergyToFly: 10, // Minimum energy required to enter flight mode
 
   // Thrust forces (applied as forces, not velocity overrides)
-  // These need to be strong enough to overcome gravity (1.5)
+  // These need to be strong enough to overcome gravity (1.0)
   thrustForce: 0.008, // Horizontal thrust force
-  verticalThrustUp: 0.012, // Upward thrust (stronger to fight gravity)
-  verticalThrustDown: 0.006, // Downward thrust (gravity assists)
+  verticalThrustUp: 0.010, // Upward thrust (fight reduced gravity)
+  verticalThrustDown: 0.012, // Downward thrust (stronger for active descent control)
 
   // Velocity limits during flight
   maxFlightVelocityX: 8, // Horizontal speed cap while flying
@@ -96,7 +96,7 @@ export const FLIGHT = {
 
   // Gravity counterforce - applied constantly to create floaty feel
   // This counteracts most of gravity so player hovers when not pressing anything
-  gravityCounterForce: 0.0012, // Counteracts ~80% of gravity for floaty hover
+  gravityCounterForce: 0.0010, // Counteracts gravity for floaty hover
 
   // State transition thresholds
   knockbackExitThreshold: 8, // Velocity magnitude that forces exit from flight

@@ -19,7 +19,7 @@ const gameConfig = {
   physics: {
     default: 'matter',
     matter: {
-      gravity: { y: 1.5 },
+      gravity: { y: 1.0 }, // Reduced from 1.5 for more floaty feel
       debug: false, // Controlled via debug toggle in-game
       // Enable sleeping for performance (bodies at rest don't compute)
       enableSleeping: false,

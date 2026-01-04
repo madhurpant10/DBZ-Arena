@@ -205,6 +205,7 @@ export default class CombatSystem {
 
   /**
    * Attempts to fire a projectile for a player
+   * Uses character-specific cooldown and energy costs
    * @param {Player} player - The player firing
    * @param {Function} createProjectile - Factory function to create projectile
    * @returns {boolean} Whether the attack was successful
@@ -212,19 +213,20 @@ export default class CombatSystem {
   attemptAttack(player, createProjectile) {
     const now = this.scene.time.now;
     const lastAttack = this.attackCooldowns.get(player.playerNumber) || 0;
+    const stats = player.getStats();
 
-    // Check cooldown
-    if (now - lastAttack < COMBAT.basicAttackCooldown) {
+    // Check cooldown using character-specific value
+    if (now - lastAttack < stats.attackCooldown) {
       return false;
     }
 
-    // Check energy cost
-    if (player.energy < PROJECTILE.energyCost) {
+    // Check energy cost using character-specific value
+    if (player.energy < stats.attackEnergyCost) {
       return false;
     }
 
-    // Consume energy
-    player.useEnergy(PROJECTILE.energyCost);
+    // Consume energy using character-specific cost
+    player.useEnergy(stats.attackEnergyCost);
 
     // Update cooldown
     this.attackCooldowns.set(player.playerNumber, now);
@@ -233,7 +235,7 @@ export default class CombatSystem {
     const projectile = createProjectile();
     this.projectiles.add(projectile);
 
-    logDebug(`CombatSystem: Player ${player.playerNumber} fired projectile`);
+    logDebug(`CombatSystem: Player ${player.playerNumber} fired projectile (cost: ${stats.attackEnergyCost.toFixed(1)} Ki)`);
 
     return true;
   }
