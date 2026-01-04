@@ -1,11 +1,17 @@
 import { PLAYER_STATS, COMBAT, PLAYER_STATES, FLIGHT } from '../constants/gameBalance.js';
 import { PLAYER_BODY, PLAYER_MOVEMENT, COMBAT_PHYSICS, FLIGHT_PHYSICS } from '../constants/physics.js';
 import { logDebug, logInfo } from '../utils/debug.js';
+import { getDefaultCharacter } from '../characters/index.js';
 
 /**
  * Player Entity
  * Represents a playable fighter with physics, combat, flight, and rendering
  * Uses a state machine to manage behavior modes
+ *
+ * ARCHITECTURE NOTE:
+ * Player is now data-driven via characterConfig. All stats are read from
+ * the character config passed at construction time. This allows different
+ * characters to have different gameplay feel without any if/else logic.
  */
 export default class Player {
   /**
@@ -14,15 +20,22 @@ export default class Player {
    * @param {number} playerNumber - 1 or 2
    * @param {number} x - Spawn X position
    * @param {number} y - Spawn Y position
+   * @param {Object} characterConfig - Character configuration object
    */
-  constructor(scene, physicsSystem, playerNumber, x, y) {
+  constructor(scene, physicsSystem, playerNumber, x, y, characterConfig) {
     this.scene = scene;
     this.physics = physicsSystem;
     this.playerNumber = playerNumber;
 
-    // Core stats
-    this.health = PLAYER_STATS.maxHealth;
-    this.energy = PLAYER_STATS.maxEnergy;
+    // Store character config - this drives all stats (fallback to default if not provided)
+    this.character = characterConfig || getDefaultCharacter();
+
+    // Calculate actual stats from base + character multipliers
+    this.stats = this.calculateStats();
+
+    // Core stats - initialized from character config
+    this.health = this.stats.maxHealth;
+    this.energy = this.stats.maxEnergy;
     this.damageTaken = 0; // Cumulative damage for knockback scaling
     this.facingDirection = playerNumber === 1 ? 1 : -1; // 1 = right, -1 = left
 
@@ -49,7 +62,51 @@ export default class Player {
     // Store reference to this entity on the body for collision lookup
     this.body.entity = this;
 
-    logInfo(`Player ${playerNumber}: Created at (${x}, ${y})`);
+    logInfo(`Player ${playerNumber}: Created as ${characterConfig.name} at (${x}, ${y})`);
+  }
+
+  /**
+   * Calculates actual stats from base values and character multipliers
+   * This is called once at construction
+   * @returns {Object} Computed stats object
+   */
+  calculateStats() {
+    const char = this.character;
+
+    return {
+      // Core stats (absolute values from character)
+      maxHealth: char.maxHealth,
+      maxEnergy: char.maxEnergy,
+
+      // Movement (base * multiplier)
+      moveForce: PLAYER_MOVEMENT.moveForce * char.moveSpeedMultiplier,
+      maxVelocityX: PLAYER_MOVEMENT.maxVelocityX * char.maxVelocityMultiplier,
+      jumpVelocity: -12 * char.jumpPowerMultiplier, // Base jump velocity * multiplier
+
+      // Flight (base * multiplier)
+      flightEnergyDrain: FLIGHT.energyDrainRate * char.flightEnergyDrainMultiplier,
+      flightThrustForce: FLIGHT.thrustForce * char.flightThrustMultiplier,
+      flightThrustUp: FLIGHT.verticalThrustUp * char.flightThrustMultiplier,
+      flightThrustDown: FLIGHT.verticalThrustDown * char.flightThrustMultiplier,
+      flightMaxVelocityX: FLIGHT.maxFlightVelocityX * char.flightMaxVelocityMultiplier,
+      flightMaxVelocityY: FLIGHT.maxFlightVelocityY * char.flightMaxVelocityMultiplier,
+      flightGravityCounter: FLIGHT.gravityCounterForce * char.flightGravityCounterMultiplier,
+
+      // Combat (base * multiplier)
+      attackDamage: COMBAT.basicAttackDamage * char.attackDamageMultiplier,
+      knockbackResistance: char.knockbackResistanceMultiplier, // Applied to incoming knockback
+      attackCooldown: COMBAT.basicAttackCooldown * char.attackCooldownMultiplier,
+
+      // Energy (base * multiplier)
+      energyRegenRate: PLAYER_STATS.energyRegenRate * char.energyRegenMultiplier,
+      energyRegenRateAir: PLAYER_STATS.energyRegenRateAir * char.energyRegenMultiplier,
+      energyRegenDelay: PLAYER_STATS.energyRegenDelay * char.energyRegenDelayMultiplier,
+
+      // Projectile stats (stored for use by CombatSystem)
+      projectileSpeedMultiplier: char.projectileSpeedMultiplier,
+      projectileLifetimeMultiplier: char.projectileLifetimeMultiplier,
+      projectileSizeMultiplier: char.projectileSizeMultiplier,
+    };
   }
 
   // ==================== STATE MACHINE ====================
@@ -174,6 +231,7 @@ export default class Player {
   /**
    * Handles horizontal movement input
    * Movement behavior changes based on current state
+   * Uses character-specific movement stats
    * @param {number} direction - -1 (left), 0 (none), 1 (right)
    */
   move(direction) {
@@ -183,21 +241,22 @@ export default class Player {
       // Update facing direction
       this.facingDirection = direction;
 
-      // Apply movement force - same for ground and air
+      // Apply movement force using character-specific value
       this.physics.applyForce(this.body, {
-        x: PLAYER_MOVEMENT.moveForce * direction,
+        x: this.stats.moveForce * direction,
         y: 0,
       });
     }
 
-    // Clamp velocity based on state
-    const maxVelX = this.isFlying() ? FLIGHT.maxFlightVelocityX : PLAYER_MOVEMENT.maxVelocityX;
+    // Clamp velocity based on state using character-specific values
+    const maxVelX = this.isFlying() ? this.stats.flightMaxVelocityX : this.stats.maxVelocityX;
     this.physics.clampVelocity(this.body, maxVelX);
   }
 
   /**
    * Attempts to jump
    * Only works when GROUNDED or AIRBORNE (with remaining jumps)
+   * Uses character-specific jump power
    * @returns {boolean} Whether jump was successful
    */
   jump() {
@@ -211,11 +270,10 @@ export default class Player {
       return false;
     }
 
-    // Perform jump with velocity-based impulse
-    const jumpVelocity = -12;
+    // Perform jump with character-specific velocity
     this.physics.setVelocity(this.body, {
       x: this.body.velocity.x,
-      y: jumpVelocity,
+      y: this.stats.jumpVelocity,
     });
 
     this.jumpsRemaining--;
@@ -260,23 +318,24 @@ export default class Player {
   /**
    * Applies thrust force during flight
    * Called every frame while flying with directional input
+   * Uses character-specific thrust values
    * @param {number} horizontalInput - -1, 0, or 1
    * @param {number} verticalInput - -1 (up), 0, or 1 (down)
    */
   applyFlightThrust(horizontalInput, verticalInput) {
     if (!this.isFlying()) return;
 
-    // Calculate thrust vector
-    let thrustX = horizontalInput * FLIGHT.thrustForce;
+    // Calculate thrust vector using character-specific values
+    let thrustX = horizontalInput * this.stats.flightThrustForce;
 
     // Vertical thrust - use different force for up vs down
     let thrustY = 0;
     if (verticalInput < 0) {
       // Going up - need stronger thrust to overcome gravity
-      thrustY = verticalInput * FLIGHT.verticalThrustUp;
+      thrustY = verticalInput * this.stats.flightThrustUp;
     } else if (verticalInput > 0) {
       // Going down - gravity assists, less thrust needed
-      thrustY = verticalInput * FLIGHT.verticalThrustDown;
+      thrustY = verticalInput * this.stats.flightThrustDown;
     }
 
     // Apply thrust forces
@@ -284,24 +343,26 @@ export default class Player {
       this.physics.applyForce(this.body, { x: thrustX, y: thrustY });
     }
 
-    // Clamp flight velocity
+    // Clamp flight velocity using character-specific limits
     this.physics.clampVelocity(
       this.body,
-      FLIGHT.maxFlightVelocityX,
-      FLIGHT.maxFlightVelocityY
+      this.stats.flightMaxVelocityX,
+      this.stats.flightMaxVelocityY
     );
   }
 
   /**
    * Consumes energy while flying
    * Called every frame during flight
+   * Uses character-specific drain rate
    * @param {number} delta - Delta time in ms
    * @returns {boolean} Whether energy was consumed (false = out of energy)
    */
   consumeFlightEnergy(delta) {
     if (!this.isFlying()) return true;
 
-    const drainAmount = FLIGHT.energyDrainRate * (delta / 16.67); // Normalize to 60fps
+    // Use character-specific drain rate
+    const drainAmount = this.stats.flightEnergyDrain * (delta / 16.67); // Normalize to 60fps
     this.energy = Math.max(0, this.energy - drainAmount);
     this.lastEnergyUse = this.scene.time.now;
 
@@ -317,14 +378,12 @@ export default class Player {
   /**
    * Updates flight-related gravity scaling
    * Called every frame during flight
-   * Creates a floaty feel with slow descent
+   * Uses character-specific gravity counter
    */
   updateFlightGravity() {
     if (this.isFlying()) {
-      // Apply reduced gravity effect by counteracting a portion of gravity
-      // This is done via force, not by modifying world gravity
-      // Uses the constant from FLIGHT config for easy tuning
-      this.physics.applyForce(this.body, { x: 0, y: -FLIGHT.gravityCounterForce });
+      // Apply reduced gravity effect using character-specific value
+      this.physics.applyForce(this.body, { x: 0, y: -this.stats.flightGravityCounter });
     }
   }
 
@@ -354,15 +413,21 @@ export default class Player {
 
   /**
    * Applies knockback force
-   * Forces exit from flight if knockback is strong enough
+   * Uses character-specific knockback resistance
    * @param {Object} force - Force vector { x, y }
    */
   applyKnockback(force) {
-    // Apply the force
-    this.physics.applyForce(this.body, force);
+    // Apply knockback resistance - reduce force based on character
+    const resistedForce = {
+      x: force.x / this.stats.knockbackResistance,
+      y: force.y / this.stats.knockbackResistance,
+    };
+
+    // Apply the resisted force
+    this.physics.applyForce(this.body, resistedForce);
 
     // Calculate knockback magnitude
-    const magnitude = Math.sqrt(force.x * force.x + force.y * force.y);
+    const magnitude = Math.sqrt(resistedForce.x * resistedForce.x + resistedForce.y * resistedForce.y);
 
     // Strong knockback forces exit from flight
     if (this.isFlying() && magnitude > FLIGHT.knockbackExitThreshold * 0.001) {
@@ -416,6 +481,7 @@ export default class Player {
   /**
    * Regenerates energy over time
    * Rate varies based on state (slower in air/flight)
+   * Uses character-specific regeneration rates
    * @param {number} delta - Delta time in ms
    */
   regenerateEnergy(delta) {
@@ -424,18 +490,18 @@ export default class Player {
 
     const now = this.scene.time.now;
 
-    // Don't regen if recently used energy
-    if (now - this.lastEnergyUse < PLAYER_STATS.energyRegenDelay) {
+    // Don't regen if recently used energy (using character-specific delay)
+    if (now - this.lastEnergyUse < this.stats.energyRegenDelay) {
       return;
     }
 
-    // Determine regen rate based on state
+    // Determine regen rate based on state using character-specific values
     const regenRate = this.state === PLAYER_STATES.GROUNDED
-      ? PLAYER_STATS.energyRegenRate
-      : PLAYER_STATS.energyRegenRateAir;
+      ? this.stats.energyRegenRate
+      : this.stats.energyRegenRateAir;
 
     this.energy = Math.min(
-      PLAYER_STATS.maxEnergy,
+      this.stats.maxEnergy,
       this.energy + regenRate * (delta / 16.67) // Normalize to 60fps
     );
   }
@@ -452,12 +518,13 @@ export default class Player {
 
   /**
    * Resets player to spawn state
+   * Uses character-specific max values
    * @param {number} x - Spawn X
    * @param {number} y - Spawn Y
    */
   reset(x, y) {
-    this.health = PLAYER_STATS.maxHealth;
-    this.energy = PLAYER_STATS.maxEnergy;
+    this.health = this.stats.maxHealth;
+    this.energy = this.stats.maxEnergy;
     this.damageTaken = 0;
     this.jumpsRemaining = PLAYER_MOVEMENT.maxJumps;
     this.isInvincible = false;
@@ -523,7 +590,7 @@ export default class Player {
 
   /**
    * Updates the visual representation
-   * Appearance changes based on state
+   * Uses character-specific colors
    */
   updateVisuals() {
     this.graphics.clear();
@@ -533,8 +600,8 @@ export default class Player {
     const halfWidth = PLAYER_BODY.width / 2;
     const halfHeight = PLAYER_BODY.height / 2;
 
-    // Base color based on player number
-    let color = this.playerNumber === 1 ? 0xe74c3c : 0x3498db;
+    // Use character-specific color
+    let color = this.character.color;
     let outlineColor = 0x000000;
     let alpha = 1;
 
@@ -591,8 +658,8 @@ export default class Player {
 
     // Draw flight indicator when flying
     if (this.isFlying()) {
-      // Small flames/thrusters at bottom
-      this.graphics.fillStyle(0xf39c12, 0.8);
+      // Small flames/thrusters at bottom using character accent color
+      this.graphics.fillStyle(this.character.accentColor, 0.8);
       const flameY = y + halfHeight + 5;
       const flameSize = 8 + Math.sin(this.scene.time.now / 50) * 3; // Animated
       this.graphics.fillCircle(x - 10, flameY, flameSize);
@@ -622,6 +689,22 @@ export default class Player {
       x: this.body.velocity.x,
       y: this.body.velocity.y,
     };
+  }
+
+  /**
+   * Gets the character configuration
+   * @returns {Object} Character config
+   */
+  getCharacter() {
+    return this.character;
+  }
+
+  /**
+   * Gets the computed stats
+   * @returns {Object} Stats object
+   */
+  getStats() {
+    return this.stats;
   }
 
   // ==================== CLEANUP ====================

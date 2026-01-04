@@ -7,6 +7,7 @@ import Projectile from '../entities/Projectile.js';
 import { ARENA, UI, PLAYER_STATS, PLAYER_STATES } from '../constants/gameBalance.js';
 import { DEBUG_CONTROLS } from '../constants/controls.js';
 import { debug, logInfo } from '../utils/debug.js';
+import { getDefaultCharacter } from '../characters/index.js';
 
 /**
  * GameScene - Main gameplay scene
@@ -33,6 +34,10 @@ export default class GameScene extends Phaser.Scene {
     // Game state
     this.isPaused = false;
     this.gameMode = 'local1v1';
+
+    // Character selections
+    this.player1Character = null;
+    this.player2Character = null;
   }
 
   /**
@@ -54,7 +59,13 @@ export default class GameScene extends Phaser.Scene {
     this.debugTexts = null;
 
     this.gameMode = data.mode || 'local1v1';
+
+    // Get character selections (fallback to defaults if not provided)
+    this.player1Character = data.player1Character || getDefaultCharacter();
+    this.player2Character = data.player2Character || getDefaultCharacter();
+
     logInfo(`GameScene: Initializing with mode "${this.gameMode}"`);
+    logInfo(`GameScene: P1=${this.player1Character.name}, P2=${this.player2Character.name}`);
   }
 
   /**
@@ -296,22 +307,24 @@ export default class GameScene extends Phaser.Scene {
    * Creates player entities
    */
   createPlayers() {
-    // Player 1
+    // Player 1 with selected character
     const p1 = new Player(
       this,
       this.physicsSystem,
       1,
       ARENA.spawnPoints.player1.x,
-      ARENA.spawnPoints.player1.y
+      ARENA.spawnPoints.player1.y,
+      this.player1Character
     );
 
-    // Player 2
+    // Player 2 with selected character
     const p2 = new Player(
       this,
       this.physicsSystem,
       2,
       ARENA.spawnPoints.player2.x,
-      ARENA.spawnPoints.player2.y
+      ARENA.spawnPoints.player2.y,
+      this.player2Character
     );
 
     this.players = [p1, p2];
@@ -366,14 +379,15 @@ export default class GameScene extends Phaser.Scene {
    * @returns {Object} HUD element references
    */
   createPlayerHUD(playerNumber, x, y) {
-    const color = playerNumber === 1 ? 0xe74c3c : 0x3498db;
+    const character = playerNumber === 1 ? this.player1Character : this.player2Character;
+    const colorHex = '#' + character.color.toString(16).padStart(6, '0');
     const container = this.add.container(x, y);
 
-    // Player label
-    const label = this.add.text(0, 0, `P${playerNumber}`, {
-      fontSize: '20px',
+    // Player label with character name
+    const label = this.add.text(0, 0, `P${playerNumber} - ${character.name}`, {
+      fontSize: '18px',
       fontFamily: 'Arial Black, Arial, sans-serif',
-      color: playerNumber === 1 ? '#e74c3c' : '#3498db',
+      color: colorHex,
     });
     container.add(label);
 
@@ -426,9 +440,10 @@ export default class GameScene extends Phaser.Scene {
 
     if (!player || !hud) return;
 
-    // Calculate percentages
-    const healthPercent = player.health / PLAYER_STATS.maxHealth;
-    const energyPercent = player.energy / PLAYER_STATS.maxEnergy;
+    // Calculate percentages using character-specific max values
+    const stats = player.getStats();
+    const healthPercent = player.health / stats.maxHealth;
+    const energyPercent = player.energy / stats.maxEnergy;
 
     // Update health bar
     hud.healthBar.clear();

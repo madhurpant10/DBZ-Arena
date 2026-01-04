@@ -325,7 +325,7 @@ export default class ModeSelectScene extends Phaser.Scene {
 
     switch (selectedMode.key) {
       case 'local1v1':
-        this.scene.start('GameScene', { mode: 'local1v1' });
+        this.scene.start('CharacterSelectScene', { mode: 'local1v1' });
         break;
 
       default:

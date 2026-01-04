@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import BootScene from '../scenes/BootScene.js';
 import MainMenuScene from '../scenes/MainMenuScene.js';
 import ModeSelectScene from '../scenes/ModeSelectScene.js';
+import CharacterSelectScene from '../scenes/CharacterSelectScene.js';
 import GameScene from '../scenes/GameScene.js';
 
 /**
@@ -38,7 +39,7 @@ const gameConfig = {
     },
   },
 
-  scene: [BootScene, MainMenuScene, ModeSelectScene, GameScene],
+  scene: [BootScene, MainMenuScene, ModeSelectScene, CharacterSelectScene, GameScene],
 
   // Render settings
   render: {
