@@ -288,6 +288,8 @@ export default class GameScene extends Phaser.Scene {
       const energy = Math.round(player.energy);
       const health = Math.round(player.health);
 
+      const airFriction = player.body ? player.body.frictionAir : 'N/A';
+      const stats = player.getStats();
       const info = [
         `P${player.playerNumber} Debug:`,
         `State: ${state}`,
@@ -296,6 +298,8 @@ export default class GameScene extends Phaser.Scene {
         `HP: ${health} | Ki: ${energy}`,
         `Flying: ${player.isFlying() ? 'YES' : 'NO'}`,
         `Jumps: ${player.jumpsRemaining}`,
+        `AirFric: ${typeof airFriction === 'number' ? airFriction.toFixed(3) : airFriction}`,
+        `MoveF: ${stats.moveForce.toFixed(4)} | MaxV: ${stats.maxVelocityX.toFixed(1)}`,
       ].join('\n');
 
       const debugText = index === 0 ? this.debugTexts.p1 : this.debugTexts.p2;

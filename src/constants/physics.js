@@ -95,8 +95,8 @@ export const COMBAT_PHYSICS = {
  * Ground/Platform physics
  */
 export const GROUND = {
-  friction: 0.1, // Low friction for smooth movement
-  frictionStatic: 0.2, // Low static friction to prevent sticking
+  friction: 0.001, // Very low friction - players should slide smoothly
+  frictionStatic: 0.01, // Very low static friction to prevent sticking
   restitution: 0,
   collisionCategory: 0x0004,
 };

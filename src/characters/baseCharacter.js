@@ -233,14 +233,115 @@ export const BASE_CHARACTER = {
 };
 
 /**
+ * Calculates a display stat (1-5) from multipliers using weighted average
+ * @param {Object} values - Object with multiplier values
+ * @param {Object} weights - Object with weights for each value (should sum to 1)
+ * @param {Object} options - Optional min/max for the scale
+ * @returns {number} Display stat from 1-5
+ */
+function calculateDisplayStat(values, weights, options = {}) {
+  const { min = 0.7, max = 1.4 } = options; // Range of multipliers to map to 1-5
+
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  for (const [key, weight] of Object.entries(weights)) {
+    if (values[key] !== undefined) {
+      weightedSum += values[key] * weight;
+      totalWeight += weight;
+    }
+  }
+
+  // Normalize if weights don't sum to 1
+  const average = totalWeight > 0 ? weightedSum / totalWeight : 1.0;
+
+  // Map from multiplier range to 1-5 scale
+  // 0.7 -> 1, 1.0 -> 3, 1.4 -> 5 (approximately)
+  const normalized = (average - min) / (max - min);
+  const rating = Math.round(1 + normalized * 4);
+
+  // Clamp to 1-5
+  return Math.max(1, Math.min(5, rating));
+}
+
+/**
+ * Calculates all display stats from character multipliers
+ * @param {Object} char - Character configuration
+ * @returns {Object} Display stats object
+ */
+function calculateDisplayStats(char) {
+  // Speed: movement, velocity, flight speed, attack rate (inverted cooldown)
+  const displaySpeed = calculateDisplayStat({
+    moveSpeed: char.moveSpeedMultiplier,
+    maxVelocity: char.maxVelocityMultiplier,
+    flightSpeed: char.flightMaxVelocityMultiplier,
+    attackRate: 2 - char.attackCooldownMultiplier, // Invert: lower cooldown = higher speed
+  }, {
+    moveSpeed: 0.3,
+    maxVelocity: 0.25,
+    flightSpeed: 0.25,
+    attackRate: 0.2,
+  });
+
+  // Power: attack damage, projectile effectiveness
+  const displayPower = calculateDisplayStat({
+    damage: char.attackDamageMultiplier,
+    projSpeed: char.projectileSpeedMultiplier,
+    projSize: char.projectileSizeMultiplier,
+  }, {
+    damage: 0.5,
+    projSpeed: 0.25,
+    projSize: 0.25,
+  });
+
+  // Durability: health, knockback resistance
+  const displayDurability = calculateDisplayStat({
+    health: char.maxHealth / 100, // Normalize health to multiplier scale
+    knockback: char.knockbackResistanceMultiplier,
+  }, {
+    health: 0.6,
+    knockback: 0.4,
+  });
+
+  // Ki: energy pool, regen rate, attack cost efficiency (inverted)
+  const displayKi = calculateDisplayStat({
+    energy: char.maxEnergy / 100, // Normalize energy to multiplier scale
+    regen: char.energyRegenMultiplier,
+    efficiency: 2 - char.attackEnergyCostMultiplier, // Invert: lower cost = better Ki
+    flightEfficiency: 2 - char.flightEnergyDrainMultiplier, // Invert: lower drain = better
+  }, {
+    energy: 0.25,
+    regen: 0.3,
+    efficiency: 0.25,
+    flightEfficiency: 0.2,
+  });
+
+  return { displaySpeed, displayPower, displayDurability, displayKi };
+}
+
+/**
  * Creates a character config by merging overrides with base
+ * Display stats are auto-calculated from multipliers
  * @param {Object} overrides - Character-specific values
  * @returns {Object} Complete character configuration
  */
 export function createCharacter(overrides) {
-  return {
+  // Merge base with overrides
+  const merged = {
     ...BASE_CHARACTER,
     ...overrides,
+  };
+
+  // Auto-calculate display stats from actual multipliers
+  const calculatedStats = calculateDisplayStats(merged);
+
+  // Use calculated stats, but allow manual override if specified
+  return {
+    ...merged,
+    displaySpeed: overrides.displaySpeed ?? calculatedStats.displaySpeed,
+    displayPower: overrides.displayPower ?? calculatedStats.displayPower,
+    displayDurability: overrides.displayDurability ?? calculatedStats.displayDurability,
+    displayKi: overrides.displayKi ?? calculatedStats.displayKi,
   };
 }
 

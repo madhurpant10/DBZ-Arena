@@ -178,6 +178,17 @@ export default class Player {
         this.jumpsRemaining = PLAYER_MOVEMENT.maxJumps;
         // Restore normal air friction (fixes slow movement after flying)
         this.setAirFriction(FLIGHT_PHYSICS.frictionAirNormal);
+        // Reset body friction to prevent ground sticking
+        this.body.friction = PLAYER_BODY.friction;
+        this.body.frictionStatic = PLAYER_BODY.frictionStatic;
+        break;
+      case PLAYER_STATES.AIRBORNE:
+        // Ensure normal air friction when entering airborne
+        // This catches edge cases like FLYING->STUNNED->AIRBORNE where friction might not reset
+        this.setAirFriction(FLIGHT_PHYSICS.frictionAirNormal);
+        // Reset body friction
+        this.body.friction = PLAYER_BODY.friction;
+        this.body.frictionStatic = PLAYER_BODY.frictionStatic;
         break;
       case PLAYER_STATES.FLYING:
         // Increase air friction for flight stability
@@ -238,15 +249,39 @@ export default class Player {
   move(direction) {
     if (!this.canAct()) return;
 
+    const currentVelocityX = this.body.velocity.x;
+    const maxSpeed = this.stats.maxVelocityX;
+
+    // Movement constants - tuned for responsive but smooth feel
+    // These use lerp (linear interpolation) which is standard in game dev
+    const groundAcceleration = 0.15; // How fast to reach max speed (0-1, lower = smoother)
+    const groundDeceleration = 0.12; // How fast to stop when no input (0-1, lower = more slide)
+    const airAcceleration = 0.08; // Slower acceleration in air for floaty feel
+    const airDeceleration = 0.05; // Less air control when stopping
+
+    // Choose acceleration based on whether grounded or airborne
+    const isGrounded = this.state === PLAYER_STATES.GROUNDED;
+    const accel = isGrounded ? groundAcceleration : airAcceleration;
+    const decel = isGrounded ? groundDeceleration : airDeceleration;
+
     if (direction !== 0) {
       // Update facing direction
       this.facingDirection = direction;
 
-      // Apply movement force using character-specific value
-      this.physics.applyForce(this.body, {
-        x: this.stats.moveForce * direction,
-        y: 0,
-      });
+      // Target velocity based on input direction
+      const targetVelocityX = maxSpeed * direction;
+
+      // Lerp towards target velocity (smooth acceleration)
+      const newVelocityX = currentVelocityX + (targetVelocityX - currentVelocityX) * accel;
+      this.physics.setVelocityX(this.body, newVelocityX);
+    } else {
+      // No input - lerp towards zero (smooth deceleration)
+      if (Math.abs(currentVelocityX) > 0.1) {
+        const newVelocityX = currentVelocityX * (1 - decel);
+        this.physics.setVelocityX(this.body, newVelocityX);
+      } else {
+        this.physics.setVelocityX(this.body, 0);
+      }
     }
 
     // Clamp velocity based on state using character-specific values

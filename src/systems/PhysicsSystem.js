@@ -64,6 +64,9 @@ export default class PhysicsSystem {
     const wallThickness = 50;
 
     const wallOptions = {
+      friction: 0, // Zero friction so players don't slow down on walls
+      frictionStatic: 0,
+      restitution: 0,
       collisionFilter: {
         category: this.categories.ground, // Use ground category (0x0004)
         mask: this.categories.player | this.categories.projectile,
@@ -176,6 +179,9 @@ export default class PhysicsSystem {
         label: label,
         // Prevent rotation - keep player upright
         inertia: Infinity,
+        // Prevent body from sleeping (which can cause movement issues)
+        isSleeping: false,
+        sleepThreshold: Infinity,
         collisionFilter: {
           category: this.categories.player,
           mask: this.categories.ground | this.categories.projectile | this.categories.player,
