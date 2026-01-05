@@ -1,20 +1,28 @@
 import Phaser from 'phaser';
 import { logInfo } from '../utils/debug.js';
+import {
+  COLORS,
+  FONTS,
+  LAYOUT,
+  TEXT_STYLES,
+  createMenuBackground,
+  createCornerAccents,
+} from '../constants/uiStyles.js';
 
 /**
- * ModeSelectScene - Game mode selection screen
- * Allows players to choose between different game modes
+ * ModeSelectScene - Premium game mode selection screen
+ * Horizontal card layout with refined selection feedback
  */
 export default class ModeSelectScene extends Phaser.Scene {
   constructor() {
     super({ key: 'ModeSelectScene' });
 
-    // Mode definitions - easily extensible
+    // Mode definitions
     this.modes = [
       {
         key: 'local1v1',
         name: 'LOCAL 1V1',
-        description: 'Two players, one keyboard',
+        description: 'Two players,\none keyboard',
         available: true,
       },
       {
@@ -39,7 +47,7 @@ export default class ModeSelectScene extends Phaser.Scene {
   create() {
     logInfo('ModeSelectScene: Creating mode selection');
 
-    // Reset state (constructor only runs once)
+    // Reset state
     this.selectedIndex = 0;
     this.modeCards = [];
     this.canNavigate = true;
@@ -48,82 +56,66 @@ export default class ModeSelectScene extends Phaser.Scene {
     this.createHeader();
     this.createModeCards();
     this.createFooter();
-
     this.setupKeyboardInput();
+
+    // Entry animation
+    this.playEntryAnimation();
   }
 
   /**
-   * Creates background
+   * Creates premium dark background with diagonal pattern
    */
   createBackground() {
-    const { width, height } = this.cameras.main;
-
-    // Dark gradient background matching main menu
-    const bg = this.add.graphics();
-    bg.fillGradientStyle(0x0a0a12, 0x0a0a12, 0x141428, 0x141428, 1);
-    bg.fillRect(0, 0, width, height);
-
-    // Subtle diagonal lines
-    bg.lineStyle(2, 0xf39c12, 0.05);
-    bg.lineBetween(0, height, width * 0.4, 0);
-    bg.lineBetween(width, 0, width * 0.6, height);
-
-    // Corner accents
-    this.createCornerAccents(bg, width, height);
+    createMenuBackground(this);
+    createCornerAccents(this);
   }
 
   /**
-   * Creates corner accent decorations
-   */
-  createCornerAccents(bg, width, height) {
-    const cornerSize = 40;
-    bg.lineStyle(2, 0xf39c12, 0.3);
-
-    // Top-left
-    bg.lineBetween(0, cornerSize, 0, 0);
-    bg.lineBetween(0, 0, cornerSize, 0);
-
-    // Top-right
-    bg.lineBetween(width - cornerSize, 0, width, 0);
-    bg.lineBetween(width, 0, width, cornerSize);
-
-    // Bottom-left
-    bg.lineBetween(0, height - cornerSize, 0, height);
-    bg.lineBetween(0, height, cornerSize, height);
-
-    // Bottom-right
-    bg.lineBetween(width - cornerSize, height, width, height);
-    bg.lineBetween(width, height - cornerSize, width, height);
-  }
-
-  /**
-   * Creates header section
+   * Creates header with two-tone title
    */
   createHeader() {
-    const { width } = this.cameras.main;
+    const { width, height } = this.cameras.main;
+    const centerX = width / 2;
+    const titleY = height * 0.18;
 
-    // Title shadow
-    const titleShadow = this.add.text(width / 2 + 2, 72, 'SELECT MODE', {
-      fontSize: '42px',
-      fontFamily: 'Impact, Haettenschweiler, sans-serif',
-      color: '#000000',
+    // Create "SELECT" text (white)
+    const selectText = this.add.text(0, 0, 'SELECT', {
+      fontSize: '72px',
+      fontFamily: FONTS.title.fontFamily,
+      color: '#ffffff',
     });
-    titleShadow.setOrigin(0.5);
-    titleShadow.setAlpha(0.5);
 
-    // Title
-    const title = this.add.text(width / 2, 70, 'SELECT MODE', {
-      fontSize: '42px',
-      fontFamily: 'Impact, Haettenschweiler, sans-serif',
-      color: '#f39c12',
-      letterSpacing: 4,
+    // Create "MODE" text (gold)
+    const modeText = this.add.text(0, 0, 'MODE', {
+      fontSize: '72px',
+      fontFamily: FONTS.title.fontFamily,
+      color: COLORS.textGold,
     });
-    title.setOrigin(0.5);
 
-    // Decorative line
-    const line = this.add.graphics();
-    line.lineStyle(2, 0xf39c12, 0.4);
-    line.lineBetween(width / 2 - 120, 100, width / 2 + 120, 100);
+    // Calculate centering
+    const spacing = 20;
+    const totalWidth = selectText.width + spacing + modeText.width;
+    const startX = -totalWidth / 2;
+
+    selectText.setPosition(startX, 0);
+    selectText.setOrigin(0, 0.5);
+
+    modeText.setPosition(startX + selectText.width + spacing, 0);
+    modeText.setOrigin(0, 0.5);
+
+    // Container for animation
+    this.titleContainer = this.add.container(centerX, titleY);
+    this.titleContainer.add([selectText, modeText]);
+
+    // Accent line below "MODE"
+    const lineY = titleY + 45;
+    const modeStartX = centerX + startX + selectText.width + spacing;
+    const modeEndX = modeStartX + modeText.width;
+
+    const accentLine = this.add.graphics();
+    accentLine.lineStyle(3, COLORS.gold, 0.8);
+    accentLine.lineBetween(modeStartX, lineY, modeEndX, lineY);
+    this.accentLine = accentLine;
   }
 
   /**
@@ -131,80 +123,112 @@ export default class ModeSelectScene extends Phaser.Scene {
    */
   createModeCards() {
     const { width, height } = this.cameras.main;
-    const cardWidth = 280;
-    const cardHeight = 160;
-    const spacing = 30;
+    const cardWidth = 260;
+    const cardHeight = 260;
+    const spacing = 40;
     const totalWidth = this.modes.length * cardWidth + (this.modes.length - 1) * spacing;
     const startX = (width - totalWidth) / 2 + cardWidth / 2;
-    const y = height / 2 + 10;
+    const y = height * 0.52;
 
     this.modeCards = this.modes.map((mode, index) => {
       const x = startX + index * (cardWidth + spacing);
       return this.createModeCard(x, y, cardWidth, cardHeight, mode, index);
     });
 
-    this.updateModeSelection();
+    this.updateModeSelection(false); // No animation on initial setup
   }
 
   /**
-   * Creates a single mode card
+   * Creates a single premium mode card
    */
   createModeCard(x, y, cardWidth, cardHeight, mode, index) {
     const container = this.add.container(x, y);
+    container.setAlpha(0); // Start invisible for entry animation
 
-    // Card background
-    const bg = this.add.graphics();
-    bg.fillStyle(mode.available ? 0x1a1a28 : 0x0f0f18, 1);
-    bg.fillRoundedRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 8);
-    container.add(bg);
+    // Glow effect (behind everything, only for selected)
+    const glow = this.add.graphics();
+    glow.setAlpha(0);
+    container.add(glow);
+
+    // Card background with gradient effect
+    const bgGradient = this.add.graphics();
+    if (mode.available) {
+      // Subtle gradient from dark to slightly lighter
+      bgGradient.fillStyle(0x161b22, 1);
+      bgGradient.fillRoundedRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 6);
+      // Top highlight
+      bgGradient.fillStyle(0x1c2128, 1);
+      bgGradient.fillRoundedRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight / 3, { tl: 6, tr: 6, bl: 0, br: 0 });
+    } else {
+      // Darker for disabled
+      bgGradient.fillStyle(0x0d1117, 1);
+      bgGradient.fillRoundedRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 6);
+    }
+    container.add(bgGradient);
 
     // Border
     const border = this.add.graphics();
-    border.lineStyle(2, 0x333344, 1);
-    border.strokeRoundedRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 8);
+    border.lineStyle(1.5, mode.available ? COLORS.borderMuted : 0x21262d, 1);
+    border.strokeRoundedRect(-cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 6);
     container.add(border);
 
     // Mode name
-    const nameText = this.add.text(0, -35, mode.name, {
-      fontSize: '26px',
-      fontFamily: 'Impact, Haettenschweiler, sans-serif',
-      color: mode.available ? '#ffffff' : '#444444',
-      letterSpacing: 2,
+    const nameText = this.add.text(0, -50, mode.name, {
+      fontSize: '32px',
+      fontFamily: FONTS.title.fontFamily,
+      color: mode.available ? '#ffffff' : '#484f58',
     });
     nameText.setOrigin(0.5);
     container.add(nameText);
 
     // Description
-    const descText = this.add.text(0, 5, mode.description, {
-      fontSize: '14px',
-      fontFamily: 'Consolas, monospace',
-      color: mode.available ? '#888888' : '#333333',
+    const descText = this.add.text(0, 10, mode.description, {
+      fontSize: '15px',
+      fontFamily: FONTS.helper.fontFamily,
+      color: mode.available ? '#8b949e' : '#484f58',
+      align: 'center',
+      lineSpacing: 4,
     });
     descText.setOrigin(0.5);
     container.add(descText);
 
     // Coming soon badge for unavailable modes
+    let badge = null;
     if (!mode.available) {
-      const badge = this.add.text(0, 45, 'COMING SOON', {
-        fontSize: '11px',
-        fontFamily: 'Consolas, monospace',
-        color: '#f39c12',
+      const badgeBg = this.add.graphics();
+      badgeBg.lineStyle(1, COLORS.borderMuted, 0.6);
+      badgeBg.strokeRoundedRect(-55, 55, 110, 24, 3);
+      container.add(badgeBg);
+
+      badge = this.add.text(0, 67, 'COMING SOON', {
+        fontSize: '10px',
+        fontFamily: FONTS.mono.fontFamily,
+        color: '#6e7681',
         letterSpacing: 2,
       });
       badge.setOrigin(0.5);
-      badge.setAlpha(0.7);
       container.add(badge);
     }
 
+    // Checkmark indicator (only shown when selected and available)
+    const checkCircle = this.add.graphics();
+    checkCircle.setAlpha(0);
+    container.add(checkCircle);
+
     return {
       container,
-      bg,
+      glow,
+      bgGradient,
       border,
       nameText,
       descText,
+      badge,
+      checkCircle,
       mode,
       cardWidth,
       cardHeight,
+      x,
+      y,
     };
   }
 
@@ -213,26 +237,110 @@ export default class ModeSelectScene extends Phaser.Scene {
    */
   createFooter() {
     const { width, height } = this.cameras.main;
+    const y = height * LAYOUT.hintY;
 
-    const hint = this.add.text(
-      width / 2,
-      height - 50,
-      '[ ← → ]  SELECT     [ ENTER ]  CONFIRM     [ ESC ]  BACK',
-      {
-        fontSize: '14px',
-        fontFamily: 'Consolas, monospace',
-        color: '#444444',
-        letterSpacing: 1,
-      }
-    );
-    hint.setOrigin(0.5);
+    // Create styled hint groups
+    const hintContainer = this.add.container(width / 2, y);
+
+    const hints = [
+      { key: '[ ← → ]', action: 'SELECT' },
+      { key: '[ ENTER ]', action: 'CONFIRM' },
+      { key: '[ ESC ]', action: 'BACK' },
+    ];
+
+    let totalWidth = 0;
+    const spacing = 50;
+    const elements = [];
+
+    hints.forEach((hint, i) => {
+      const keyText = this.add.text(0, 0, hint.key, {
+        fontSize: '13px',
+        fontFamily: FONTS.mono.fontFamily,
+        color: '#6e7681',
+      });
+
+      const actionText = this.add.text(keyText.width + 8, 0, hint.action, {
+        fontSize: '13px',
+        fontFamily: FONTS.mono.fontFamily,
+        color: COLORS.textMuted,
+      });
+
+      elements.push({ keyText, actionText, width: keyText.width + 8 + actionText.width });
+      totalWidth += keyText.width + 8 + actionText.width + (i < hints.length - 1 ? spacing : 0);
+    });
+
+    // Position elements
+    let currentX = -totalWidth / 2;
+    elements.forEach((el, i) => {
+      el.keyText.setPosition(currentX, 0);
+      el.actionText.setPosition(currentX + el.keyText.width + 8, 0);
+      hintContainer.add([el.keyText, el.actionText]);
+      currentX += el.width + spacing;
+    });
+
+    this.navHint = hintContainer;
+    this.navHint.setAlpha(0); // Start invisible
+  }
+
+  /**
+   * Plays entry animation
+   */
+  playEntryAnimation() {
+    const { height } = this.cameras.main;
+
+    // Title slides down
+    this.titleContainer.setY(height * 0.18 - 30);
+    this.titleContainer.setAlpha(0);
+
+    this.tweens.add({
+      targets: this.titleContainer,
+      y: height * 0.18,
+      alpha: 1,
+      duration: 400,
+      ease: 'Power2.easeOut',
+    });
+
+    // Accent line fades in
+    this.accentLine.setAlpha(0);
+    this.tweens.add({
+      targets: this.accentLine,
+      alpha: 1,
+      duration: 300,
+      delay: 200,
+    });
+
+    // Cards stagger in from bottom
+    this.modeCards.forEach((card, index) => {
+      card.container.setY(card.y + 40);
+      this.tweens.add({
+        targets: card.container,
+        y: card.y,
+        alpha: 1,
+        duration: 350,
+        delay: 150 + index * 80,
+        ease: 'Power2.easeOut',
+        onComplete: () => {
+          if (index === this.modeCards.length - 1) {
+            this.updateModeSelection(true);
+          }
+        },
+      });
+    });
+
+    // Nav hint fades in last
+    this.tweens.add({
+      targets: this.navHint,
+      alpha: 1,
+      duration: 300,
+      delay: 500,
+    });
   }
 
   /**
    * Sets up keyboard input
    */
   setupKeyboardInput() {
-    const navigationDelay = 200;
+    const navigationDelay = 150;
 
     this.input.keyboard.on('keydown-LEFT', () => {
       if (!this.canNavigate) return;
@@ -268,13 +376,13 @@ export default class ModeSelectScene extends Phaser.Scene {
       this.selectedIndex = 0;
     }
 
-    this.updateModeSelection();
+    this.updateModeSelection(true);
   }
 
   /**
    * Updates visual state of mode cards
    */
-  updateModeSelection() {
+  updateModeSelection(animate = true) {
     this.modeCards.forEach((card, index) => {
       const isSelected = index === this.selectedIndex;
       const mode = card.mode;
@@ -283,28 +391,80 @@ export default class ModeSelectScene extends Phaser.Scene {
 
       // Update border
       card.border.clear();
-      if (isSelected) {
-        card.border.lineStyle(2, mode.available ? 0xf39c12 : 0x555555, 1);
-      } else {
-        card.border.lineStyle(2, 0x333344, 1);
-      }
-      card.border.strokeRoundedRect(-hw, -hh, card.cardWidth, card.cardHeight, 8);
-
-      // Scale animation
-      const targetScale = isSelected ? 1.08 : 1;
-      this.tweens.add({
-        targets: card.container,
-        scaleX: targetScale,
-        scaleY: targetScale,
-        duration: 120,
-        ease: 'Back.easeOut',
-      });
-
-      // Update name color on selection
       if (isSelected && mode.available) {
-        card.nameText.setColor('#f39c12');
+        card.border.lineStyle(2, COLORS.borderGold, 1);
+      } else if (isSelected && !mode.available) {
+        card.border.lineStyle(1.5, 0x484f58, 1);
       } else {
-        card.nameText.setColor(mode.available ? '#ffffff' : '#444444');
+        card.border.lineStyle(1.5, mode.available ? COLORS.borderMuted : 0x21262d, 1);
+      }
+      card.border.strokeRoundedRect(-hw, -hh, card.cardWidth, card.cardHeight, 6);
+
+      // Update glow effect
+      card.glow.clear();
+      if (isSelected && mode.available) {
+        card.glow.fillStyle(COLORS.gold, 0.08);
+        card.glow.fillRoundedRect(-hw - 4, -hh - 4, card.cardWidth + 8, card.cardHeight + 8, 8);
+      }
+
+      // Animate glow
+      const glowAlpha = isSelected && mode.available ? 1 : 0;
+      if (animate) {
+        this.tweens.add({
+          targets: card.glow,
+          alpha: glowAlpha,
+          duration: 150,
+        });
+      } else {
+        card.glow.setAlpha(glowAlpha);
+      }
+
+      // Scale animation - subtle elevation
+      const targetScale = isSelected ? 1.04 : 1;
+      if (animate) {
+        this.tweens.add({
+          targets: card.container,
+          scaleX: targetScale,
+          scaleY: targetScale,
+          duration: 180,
+          ease: 'Cubic.easeOut',
+        });
+      } else {
+        card.container.setScale(targetScale);
+      }
+
+      // Update name color
+      if (isSelected && mode.available) {
+        card.nameText.setColor(COLORS.textGold);
+      } else {
+        card.nameText.setColor(mode.available ? '#ffffff' : '#484f58');
+      }
+
+      // Update checkmark indicator
+      card.checkCircle.clear();
+      if (isSelected && mode.available) {
+        // Draw circle with checkmark at bottom center of card
+        const circleY = hh + 15;
+        card.checkCircle.fillStyle(COLORS.gold, 1);
+        card.checkCircle.fillCircle(0, circleY, 14);
+
+        // Checkmark (using lines)
+        card.checkCircle.lineStyle(2.5, 0x0d1117, 1);
+        card.checkCircle.lineBetween(-5, circleY, -1, circleY + 4);
+        card.checkCircle.lineBetween(-1, circleY + 4, 6, circleY - 4);
+
+        if (animate) {
+          card.checkCircle.setAlpha(0);
+          this.tweens.add({
+            targets: card.checkCircle,
+            alpha: 1,
+            duration: 150,
+          });
+        } else {
+          card.checkCircle.setAlpha(1);
+        }
+      } else {
+        card.checkCircle.setAlpha(0);
       }
     });
   }
@@ -323,14 +483,35 @@ export default class ModeSelectScene extends Phaser.Scene {
 
     logInfo(`ModeSelectScene: Starting "${selectedMode.name}"`);
 
-    switch (selectedMode.key) {
-      case 'local1v1':
-        this.scene.start('CharacterSelectScene', { mode: 'local1v1' });
-        break;
+    // Confirmation flash effect
+    const card = this.modeCards[this.selectedIndex];
+    this.tweens.add({
+      targets: card.container,
+      scaleX: 1.08,
+      scaleY: 1.08,
+      duration: 100,
+      yoyo: true,
+      onComplete: () => {
+        this.transitionToNextScene(selectedMode);
+      },
+    });
+  }
 
-      default:
-        logInfo(`ModeSelectScene: Unknown mode "${selectedMode.key}"`);
-    }
+  /**
+   * Transitions to next scene with fade
+   */
+  transitionToNextScene(mode) {
+    this.cameras.main.fadeOut(200, 13, 17, 23);
+
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      switch (mode.key) {
+        case 'local1v1':
+          this.scene.start('CharacterSelectScene', { mode: 'local1v1' });
+          break;
+        default:
+          logInfo(`ModeSelectScene: Unknown mode "${mode.key}"`);
+      }
+    });
   }
 
   /**
@@ -339,10 +520,10 @@ export default class ModeSelectScene extends Phaser.Scene {
   showUnavailableMessage() {
     const { width, height } = this.cameras.main;
 
-    const message = this.add.text(width / 2, height - 100, 'MODE NOT YET AVAILABLE', {
-      fontSize: '16px',
-      fontFamily: 'Consolas, monospace',
-      color: '#f39c12',
+    const message = this.add.text(width / 2, height * 0.78, 'MODE NOT YET AVAILABLE', {
+      fontSize: '14px',
+      fontFamily: FONTS.mono.fontFamily,
+      color: COLORS.textGold,
       letterSpacing: 2,
     });
     message.setOrigin(0.5);
@@ -351,18 +532,22 @@ export default class ModeSelectScene extends Phaser.Scene {
     this.tweens.add({
       targets: message,
       alpha: 1,
-      duration: 200,
+      duration: 150,
       yoyo: true,
-      hold: 1200,
+      hold: 1000,
       onComplete: () => message.destroy(),
     });
   }
 
   /**
-   * Returns to main menu
+   * Returns to main menu with transition
    */
   goBack() {
-    this.scene.start('MainMenuScene');
+    this.cameras.main.fadeOut(200, 13, 17, 23);
+
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('MainMenuScene');
+    });
   }
 
   /**
