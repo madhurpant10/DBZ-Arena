@@ -10,7 +10,8 @@
 export const PLAYER_STATES = {
   GROUNDED: 'GROUNDED', // On the ground, can walk/jump/attack
   AIRBORNE: 'AIRBORNE', // In the air from jumping, subject to full gravity
-  FLYING: 'FLYING', // Controlled flight mode, reduced gravity, consumes energy
+  FLYING: 'FLYING', // Controlled flight mode, reduced gravity, consumes stamina
+  CHARGING: 'CHARGING', // Charging Ki, reduced movement, cannot attack
   STUNNED: 'STUNNED', // In hitstun, cannot act
   DEAD: 'DEAD', // KO'd, awaiting respawn or game over
 };
@@ -20,10 +21,38 @@ export const PLAYER_STATES = {
  */
 export const PLAYER_STATS = {
   maxHealth: 100,
-  maxEnergy: 100, // Ki/energy for special moves
-  energyRegenRate: 0.08, // Energy per frame (normalized to 60fps) - slow regen, ~20 sec to full
-  energyRegenDelay: 500, // Milliseconds after using energy before regen starts
-  energyRegenRateAir: 0.05, // Slower regen while airborne
+  // Stamina - used for attacks, flight, and special moves (auto-regenerates)
+  maxStamina: 100,
+  staminaRegenRate: 0.08, // Stamina per frame (normalized to 60fps) - slow regen, ~20 sec to full
+  staminaRegenDelay: 500, // Milliseconds after using stamina before regen starts
+  staminaRegenRateAir: 0.05, // Slower regen while airborne
+};
+
+/**
+ * Ki / Power Gauge system
+ * Ki is built up through combat and used for transformations
+ * Does NOT auto-regenerate - must be earned through combat or charging
+ */
+export const KI_SYSTEM = {
+  maxKi: 100,
+
+  // Ki gain from combat (reduced ~5x for slower buildup)
+  kiGainOnHit: 1, // Ki gained when landing a melee attack (was 5)
+  kiGainOnDamage: 1.5, // Ki gained when taking damage - comeback mechanic (was 8)
+  kiGainOnProjectileHit: 0.6, // Ki gained when projectile lands (was 3)
+
+  // Charging mechanic - rewards sustained holding, punishes tap-spamming
+  chargeRateBase: 0.03, // Starting Ki gain per frame (very slow at first)
+  chargeRateMax: 0.25, // Maximum Ki gain per frame after full ramp-up
+  chargeRampTime: 3000, // Milliseconds to reach full charge rate (3 seconds of holding)
+  chargeMovementPenalty: 0.3, // Movement speed multiplier while charging (30% speed)
+
+  // Transformation thresholds (percentage of maxKi)
+  partialPowerThreshold: 50, // 50% Ki - enables partial power-up (aura, minor buffs)
+  transformationThreshold: 100, // 100% Ki - full transformation available
+
+  // Transformation timeout - player must use it or lose it
+  transformationTimeout: 20000, // Milliseconds before Ki resets if transformation not used (20 sec)
 };
 
 /**
@@ -33,7 +62,7 @@ export const COMBAT = {
   // Basic attack
   basicAttackDamage: 10,
   basicAttackCooldown: 250, // Milliseconds between attacks (faster combat)
-  basicAttackEnergyCost: 8, // Ki cost per attack - prevents spamming
+  basicAttackStaminaCost: 8, // Stamina cost per attack - prevents spamming
   // Knockback scaling (damage multiplier for knockback)
   knockbackScaling: 0.01,
   // Invincibility frames after being hit
@@ -45,7 +74,7 @@ export const COMBAT = {
  */
 export const PROJECTILE = {
   damage: 10,
-  energyCost: 8, // Ki cost per projectile - same as basic attack
+  staminaCost: 8, // Stamina cost per projectile - same as basic attack
   cooldown: 250, // Milliseconds (faster to match attack cooldown)
 };
 
@@ -79,10 +108,10 @@ export const ARENA = {
  * Flight system balance
  */
 export const FLIGHT = {
-  // Energy consumption
-  // 0.083 allows ~20 seconds of flight from full energy (100 / 20 / 60 ≈ 0.083)
-  energyDrainRate: 0.083, // Energy per frame while flying (normalized to 60fps)
-  minEnergyToFly: 10, // Minimum energy required to enter flight mode
+  // Stamina consumption
+  // 0.083 allows ~20 seconds of flight from full stamina (100 / 20 / 60 ≈ 0.083)
+  staminaDrainRate: 0.083, // Stamina per frame while flying (normalized to 60fps)
+  minStaminaToFly: 10, // Minimum stamina required to enter flight mode
 
   // Thrust forces (applied as forces, not velocity overrides)
   // These need to be strong enough to overcome gravity (1.0)
@@ -108,7 +137,9 @@ export const FLIGHT = {
 export const UI = {
   healthBarWidth: 300,
   healthBarHeight: 25,
-  energyBarWidth: 200,
-  energyBarHeight: 15,
+  staminaBarWidth: 200,
+  staminaBarHeight: 12,
+  kiBarWidth: 200,
+  kiBarHeight: 12,
   hudPadding: 20,
 };

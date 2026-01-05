@@ -4,7 +4,7 @@ import PhysicsSystem from '../systems/PhysicsSystem.js';
 import CombatSystem from '../systems/CombatSystem.js';
 import Player from '../entities/Player.js';
 import Projectile from '../entities/Projectile.js';
-import { ARENA, UI, PLAYER_STATS, PLAYER_STATES } from '../constants/gameBalance.js';
+import { ARENA, UI, PLAYER_STATS, PLAYER_STATES, KI_SYSTEM } from '../constants/gameBalance.js';
 import { DEBUG_CONTROLS } from '../constants/controls.js';
 import { debug, logInfo } from '../utils/debug.js';
 import { getDefaultCharacter } from '../characters/index.js';
@@ -285,7 +285,8 @@ export default class GameScene extends Phaser.Scene {
       const pos = player.getPosition();
       const vel = player.getVelocity();
       const state = player.getState();
-      const energy = Math.round(player.energy);
+      const stamina = Math.round(player.stamina);
+      const ki = Math.round(player.ki);
       const health = Math.round(player.health);
 
       const airFriction = player.body ? player.body.frictionAir : 'N/A';
@@ -295,11 +296,12 @@ export default class GameScene extends Phaser.Scene {
         `State: ${state}`,
         `Pos: (${Math.round(pos.x)}, ${Math.round(pos.y)})`,
         `Vel: (${vel.x.toFixed(1)}, ${vel.y.toFixed(1)})`,
-        `HP: ${health} | Ki: ${energy}`,
+        `HP: ${health} | Stam: ${stamina} | Ki: ${ki}`,
         `Flying: ${player.isFlying() ? 'YES' : 'NO'}`,
+        `Charging: ${player.isCharging ? 'YES' : 'NO'}`,
+        `CanTrans: ${player.canTransform ? 'YES' : 'NO'}`,
         `Jumps: ${player.jumpsRemaining}`,
         `AirFric: ${typeof airFriction === 'number' ? airFriction.toFixed(3) : airFriction}`,
-        `MoveF: ${stats.moveForce.toFixed(4)} | MaxV: ${stats.maxVelocityX.toFixed(1)}`,
       ].join('\n');
 
       const debugText = index === 0 ? this.debugTexts.p1 : this.debugTexts.p2;
@@ -427,30 +429,60 @@ export default class GameScene extends Phaser.Scene {
     healthText.setOrigin(0.5);
     container.add(healthText);
 
-    // Ki/Energy bar outer border
-    const energyBarBorder = this.add.graphics();
-    energyBarBorder.fillStyle(0x000000, 1);
-    energyBarBorder.fillRoundedRect(-2, 58, UI.energyBarWidth + 4, UI.energyBarHeight + 4, 3);
-    container.add(energyBarBorder);
+    // Stamina bar outer border
+    const staminaBarBorder = this.add.graphics();
+    staminaBarBorder.fillStyle(0x000000, 1);
+    staminaBarBorder.fillRoundedRect(-2, 58, UI.staminaBarWidth + 4, UI.staminaBarHeight + 4, 3);
+    container.add(staminaBarBorder);
 
-    // Energy bar background
-    const energyBarBg = this.add.graphics();
-    energyBarBg.fillStyle(0x1a1a1a, 1);
-    energyBarBg.fillRoundedRect(0, 60, UI.energyBarWidth, UI.energyBarHeight, 2);
+    // Stamina bar background
+    const staminaBarBg = this.add.graphics();
+    staminaBarBg.fillStyle(0x1a1a1a, 1);
+    staminaBarBg.fillRoundedRect(0, 60, UI.staminaBarWidth, UI.staminaBarHeight, 2);
     // Inner highlight
-    energyBarBg.fillStyle(0x2a2a2a, 1);
-    energyBarBg.fillRoundedRect(0, 60, UI.energyBarWidth, UI.energyBarHeight / 2, { tl: 2, tr: 2, bl: 0, br: 0 });
-    container.add(energyBarBg);
+    staminaBarBg.fillStyle(0x2a2a2a, 1);
+    staminaBarBg.fillRoundedRect(0, 60, UI.staminaBarWidth, UI.staminaBarHeight / 2, { tl: 2, tr: 2, bl: 0, br: 0 });
+    container.add(staminaBarBg);
 
-    // Energy bar fill
-    const energyBar = this.add.graphics();
-    container.add(energyBar);
+    // Stamina bar fill
+    const staminaBar = this.add.graphics();
+    container.add(staminaBar);
+
+    // Stamina label
+    const staminaLabel = this.add.text(UI.staminaBarWidth + 8, 60 + UI.staminaBarHeight / 2, 'ST', {
+      fontSize: '10px',
+      fontFamily: 'Arial Black, Arial, sans-serif',
+      color: '#00bcd4',
+      stroke: '#000000',
+      strokeThickness: 2,
+    });
+    staminaLabel.setOrigin(0, 0.5);
+    container.add(staminaLabel);
+
+    // Ki bar outer border (below stamina bar)
+    const kiBarBorder = this.add.graphics();
+    kiBarBorder.fillStyle(0x000000, 1);
+    kiBarBorder.fillRoundedRect(-2, 76, UI.kiBarWidth + 4, UI.kiBarHeight + 4, 3);
+    container.add(kiBarBorder);
+
+    // Ki bar background
+    const kiBarBg = this.add.graphics();
+    kiBarBg.fillStyle(0x1a1a1a, 1);
+    kiBarBg.fillRoundedRect(0, 78, UI.kiBarWidth, UI.kiBarHeight, 2);
+    // Inner highlight
+    kiBarBg.fillStyle(0x2a2a2a, 1);
+    kiBarBg.fillRoundedRect(0, 78, UI.kiBarWidth, UI.kiBarHeight / 2, { tl: 2, tr: 2, bl: 0, br: 0 });
+    container.add(kiBarBg);
+
+    // Ki bar fill
+    const kiBar = this.add.graphics();
+    container.add(kiBar);
 
     // Ki label
-    const kiLabel = this.add.text(UI.energyBarWidth + 8, 60 + UI.energyBarHeight / 2, 'KI', {
-      fontSize: '12px',
+    const kiLabel = this.add.text(UI.kiBarWidth + 8, 78 + UI.kiBarHeight / 2, 'KI', {
+      fontSize: '10px',
       fontFamily: 'Arial Black, Arial, sans-serif',
-      color: '#4ecdc4',
+      color: '#f1c40f',
       stroke: '#000000',
       strokeThickness: 2,
     });
@@ -463,7 +495,8 @@ export default class GameScene extends Phaser.Scene {
       container,
       healthBar,
       healthText,
-      energyBar,
+      staminaBar,
+      kiBar,
     };
   }
 
@@ -480,7 +513,8 @@ export default class GameScene extends Phaser.Scene {
     // Calculate percentages using character-specific max values
     const stats = player.getStats();
     const healthPercent = player.health / stats.maxHealth;
-    const energyPercent = player.energy / stats.maxEnergy;
+    const staminaPercent = player.stamina / stats.maxStamina;
+    const kiPercent = player.ki / KI_SYSTEM.maxKi;
 
     // Update health bar with gradient effect
     hud.healthBar.clear();
@@ -488,16 +522,13 @@ export default class GameScene extends Phaser.Scene {
 
     if (healthWidth > 0) {
       // Health color based on percentage - vibrant colors
-      let healthColor, healthColorDark;
+      let healthColor;
       if (healthPercent > 0.5) {
         healthColor = 0x2ecc71; // Bright green
-        healthColorDark = 0x27ae60; // Darker green
       } else if (healthPercent > 0.25) {
         healthColor = 0xf39c12; // Orange
-        healthColorDark = 0xe67e22; // Darker orange
       } else {
         healthColor = 0xe74c3c; // Red
-        healthColorDark = 0xc0392b; // Darker red
       }
 
       // Main bar fill
@@ -512,22 +543,51 @@ export default class GameScene extends Phaser.Scene {
     // Update health text
     hud.healthText.setText(Math.ceil(player.health).toString());
 
-    // Update energy/ki bar with cyan/blue glow
-    hud.energyBar.clear();
-    const energyWidth = Math.max(0, UI.energyBarWidth * energyPercent);
+    // Update stamina bar with cyan/blue color
+    hud.staminaBar.clear();
+    const staminaWidth = Math.max(0, UI.staminaBarWidth * staminaPercent);
 
-    if (energyWidth > 0) {
-      // Ki bar - cyan/teal color with glow effect
-      hud.energyBar.fillStyle(0x00bcd4, 1); // Cyan
-      hud.energyBar.fillRoundedRect(0, 60, energyWidth, UI.energyBarHeight, 2);
+    if (staminaWidth > 0) {
+      // Stamina bar - cyan/teal color with glow effect
+      hud.staminaBar.fillStyle(0x00bcd4, 1); // Cyan
+      hud.staminaBar.fillRoundedRect(0, 60, staminaWidth, UI.staminaBarHeight, 2);
 
       // Highlight for glow effect
-      hud.energyBar.fillStyle(0x4dd0e1, 1); // Lighter cyan
-      hud.energyBar.fillRoundedRect(0, 60, energyWidth, UI.energyBarHeight / 2, { tl: 2, tr: 2, bl: 0, br: 0 });
+      hud.staminaBar.fillStyle(0x4dd0e1, 1); // Lighter cyan
+      hud.staminaBar.fillRoundedRect(0, 60, staminaWidth, UI.staminaBarHeight / 2, { tl: 2, tr: 2, bl: 0, br: 0 });
 
       // Bright center line for energy feel
-      hud.energyBar.fillStyle(0xffffff, 0.4);
-      hud.energyBar.fillRect(0, 60 + UI.energyBarHeight / 3, energyWidth, 2);
+      hud.staminaBar.fillStyle(0xffffff, 0.4);
+      hud.staminaBar.fillRect(0, 60 + UI.staminaBarHeight / 3, staminaWidth, 2);
+    }
+
+    // Update Ki bar with golden/yellow color (power gauge)
+    hud.kiBar.clear();
+    const kiWidth = Math.max(0, UI.kiBarWidth * kiPercent);
+
+    if (kiWidth > 0) {
+      // Ki bar - golden yellow, glows brighter as it fills
+      const kiColor = player.canTransform ? 0xf1c40f : 0xd4ac0d; // Brighter when full
+      hud.kiBar.fillStyle(kiColor, 1);
+      hud.kiBar.fillRoundedRect(0, 78, kiWidth, UI.kiBarHeight, 2);
+
+      // Highlight for glow effect
+      hud.kiBar.fillStyle(0xf5d442, 1); // Lighter gold
+      hud.kiBar.fillRoundedRect(0, 78, kiWidth, UI.kiBarHeight / 2, { tl: 2, tr: 2, bl: 0, br: 0 });
+
+      // Draw threshold markers
+      // 50% marker (partial power)
+      const halfPoint = UI.kiBarWidth * 0.5;
+      hud.kiBar.fillStyle(0xffffff, 0.5);
+      hud.kiBar.fillRect(halfPoint - 1, 78, 2, UI.kiBarHeight);
+    }
+
+    // Visual feedback when player can transform
+    if (player.canTransform) {
+      // Pulsing glow effect on Ki bar when transformation is available
+      const pulseAlpha = 0.3 + Math.sin(this.time.now / 200) * 0.2;
+      hud.kiBar.fillStyle(0xf1c40f, pulseAlpha);
+      hud.kiBar.fillRoundedRect(-2, 76, UI.kiBarWidth + 4, UI.kiBarHeight + 4, 3);
     }
   }
 
@@ -713,9 +773,9 @@ export default class GameScene extends Phaser.Scene {
 
     // Handle flight - auto-activate when holding UP with no jumps left
     if (player.isFlying()) {
-      // Currently flying - apply thrust and consume energy
+      // Currently flying - apply thrust and consume stamina
       player.applyFlightThrust(horizontal, vertical);
-      player.consumeFlightEnergy(delta);
+      player.consumeFlightStamina(delta);
 
       // Exit flight only if NEITHER up nor down is pressed (player wants to fall naturally)
       if (!input.up && !input.down) {
@@ -736,9 +796,22 @@ export default class GameScene extends Phaser.Scene {
       player.jump();
     }
 
-    // Attack
-    if (input.attackPressed) {
+    // Attack (disabled while charging - charging is a commitment)
+    if (input.attackPressed && !player.isCharging) {
       this.handlePlayerAttack(player);
+    }
+
+    // Ki Charging (hold special key while grounded)
+    if (input.special) {
+      // Try to start charging if not already
+      if (!player.isCharging) {
+        player.startCharging();
+      }
+    } else {
+      // Stop charging when key released
+      if (player.isCharging) {
+        player.stopCharging();
+      }
     }
   }
 

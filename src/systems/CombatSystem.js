@@ -1,4 +1,4 @@
-import { COMBAT, PROJECTILE } from '../constants/gameBalance.js';
+import { COMBAT, PROJECTILE, KI_SYSTEM } from '../constants/gameBalance.js';
 import { COMBAT_PHYSICS } from '../constants/physics.js';
 import { logInfo, logDebug } from '../utils/debug.js';
 
@@ -174,6 +174,15 @@ export default class CombatSystem {
     // Apply damage
     target.takeDamage(projectile.damage);
 
+    // Ki gain: Target gains Ki from taking damage (comeback mechanic)
+    target.gainKi(KI_SYSTEM.kiGainOnDamage);
+
+    // Ki gain: Attacker gains Ki from landing the hit
+    const attacker = this.players.get(projectile.owner);
+    if (attacker) {
+      attacker.onHitLanded(); // Use onHitLanded for all damage dealt
+    }
+
     // Get projectile's travel direction (normalized vector)
     const projDir = projectile.getDirection();
 
@@ -205,7 +214,7 @@ export default class CombatSystem {
 
   /**
    * Attempts to fire a projectile for a player
-   * Uses character-specific cooldown and energy costs
+   * Uses character-specific cooldown and stamina costs
    * @param {Player} player - The player firing
    * @param {Function} createProjectile - Factory function to create projectile
    * @returns {boolean} Whether the attack was successful
@@ -220,13 +229,13 @@ export default class CombatSystem {
       return false;
     }
 
-    // Check energy cost using character-specific value
-    if (player.energy < stats.attackEnergyCost) {
+    // Check stamina cost using character-specific value
+    if (player.stamina < stats.attackStaminaCost) {
       return false;
     }
 
-    // Consume energy using character-specific cost
-    player.useEnergy(stats.attackEnergyCost);
+    // Consume stamina using character-specific cost
+    player.useStamina(stats.attackStaminaCost);
 
     // Update cooldown
     this.attackCooldowns.set(player.playerNumber, now);
@@ -235,7 +244,7 @@ export default class CombatSystem {
     const projectile = createProjectile();
     this.projectiles.add(projectile);
 
-    logDebug(`CombatSystem: Player ${player.playerNumber} fired projectile (cost: ${stats.attackEnergyCost.toFixed(1)} Ki)`);
+    logDebug(`CombatSystem: Player ${player.playerNumber} fired projectile (cost: ${stats.attackStaminaCost.toFixed(1)} stamina)`);
 
     return true;
   }

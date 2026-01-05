@@ -1,4 +1,4 @@
-import { PLAYER_STATS, COMBAT, PLAYER_STATES, FLIGHT } from '../constants/gameBalance.js';
+import { PLAYER_STATS, COMBAT, PLAYER_STATES, FLIGHT, KI_SYSTEM } from '../constants/gameBalance.js';
 import { PLAYER_BODY, PLAYER_MOVEMENT, COMBAT_PHYSICS, FLIGHT_PHYSICS } from '../constants/physics.js';
 import { logDebug, logInfo } from '../utils/debug.js';
 import { getDefaultCharacter } from '../characters/index.js';
@@ -35,20 +35,29 @@ export default class Player {
 
     // Core stats - initialized from character config
     this.health = this.stats.maxHealth;
-    this.energy = this.stats.maxEnergy;
+    this.stamina = this.stats.maxStamina; // Renamed from energy - used for attacks, flight
+    this.ki = 0; // New Ki/Power Gauge - builds through combat, used for transformations
     this.damageTaken = 0; // Cumulative damage for knockback scaling
     this.facingDirection = playerNumber === 1 ? 1 : -1; // 1 = right, -1 = left
 
     // State machine - this is the source of truth for player behavior
     this.state = PLAYER_STATES.AIRBORNE; // Start airborne, will transition to grounded on landing
     this.previousState = null; // For debugging state transitions
+    this.stateBeforeCharging = null; // Track state before charging started
 
     // Movement state
     this.jumpsRemaining = PLAYER_MOVEMENT.maxJumps;
     this.isInvincible = false;
+    this.isCharging = false; // Whether player is currently charging Ki
+    this.chargeStartTime = 0; // Timestamp when current charge began (for ramp calculation)
+
+    // Transformation state
+    this.canTransform = false; // Set to true when Ki reaches 100%
+    this.hasPartialPower = false; // Set to true when Ki reaches 50%
+    this.transformationReadyTime = 0; // Timestamp when canTransform became true
 
     // Timing
-    this.lastEnergyUse = 0;
+    this.lastStaminaUse = 0; // Renamed from lastEnergyUse
 
     // Create physics body
     this.body = this.physics.createPlayerBody(x, y, `player_${playerNumber}`);
@@ -76,7 +85,7 @@ export default class Player {
     return {
       // Core stats (absolute values from character)
       maxHealth: char.maxHealth,
-      maxEnergy: char.maxEnergy,
+      maxStamina: char.maxEnergy, // Character config still uses maxEnergy for backwards compat
 
       // Movement (base * multiplier)
       moveForce: PLAYER_MOVEMENT.moveForce * char.moveSpeedMultiplier,
@@ -84,7 +93,7 @@ export default class Player {
       jumpVelocity: -12 * char.jumpPowerMultiplier, // Base jump velocity * multiplier
 
       // Flight (base * multiplier)
-      flightEnergyDrain: FLIGHT.energyDrainRate * char.flightEnergyDrainMultiplier,
+      flightStaminaDrain: FLIGHT.staminaDrainRate * char.flightEnergyDrainMultiplier,
       flightThrustForce: FLIGHT.thrustForce * char.flightThrustMultiplier,
       flightThrustUp: FLIGHT.verticalThrustUp * char.flightThrustMultiplier,
       flightThrustDown: FLIGHT.verticalThrustDown * char.flightThrustMultiplier,
@@ -97,11 +106,11 @@ export default class Player {
       knockbackResistance: char.knockbackResistanceMultiplier, // Applied to incoming knockback
       attackCooldown: COMBAT.basicAttackCooldown * char.attackCooldownMultiplier,
 
-      // Energy (base * multiplier)
-      energyRegenRate: PLAYER_STATS.energyRegenRate * char.energyRegenMultiplier,
-      energyRegenRateAir: PLAYER_STATS.energyRegenRateAir * char.energyRegenMultiplier,
-      energyRegenDelay: PLAYER_STATS.energyRegenDelay * char.energyRegenDelayMultiplier,
-      attackEnergyCost: COMBAT.basicAttackEnergyCost * char.attackEnergyCostMultiplier,
+      // Stamina (base * multiplier) - renamed from energy
+      staminaRegenRate: PLAYER_STATS.staminaRegenRate * char.energyRegenMultiplier,
+      staminaRegenRateAir: PLAYER_STATS.staminaRegenRateAir * char.energyRegenMultiplier,
+      staminaRegenDelay: PLAYER_STATS.staminaRegenDelay * char.energyRegenDelayMultiplier,
+      attackStaminaCost: COMBAT.basicAttackStaminaCost * char.attackEnergyCostMultiplier,
 
       // Projectile stats (stored for use by CombatSystem)
       projectileSpeedMultiplier: char.projectileSpeedMultiplier,
@@ -250,7 +259,10 @@ export default class Player {
     if (!this.canAct()) return;
 
     const currentVelocityX = this.body.velocity.x;
-    const maxSpeed = this.stats.maxVelocityX;
+
+    // Apply charging movement penalty (30% speed while charging - makes it risky)
+    const chargingSpeedMultiplier = this.isCharging ? KI_SYSTEM.chargeMovementPenalty : 1.0;
+    const maxSpeed = this.stats.maxVelocityX * chargingSpeedMultiplier;
 
     // Movement constants - tuned for responsive but smooth feel
     // These use lerp (linear interpolation) which is standard in game dev
@@ -285,7 +297,9 @@ export default class Player {
     }
 
     // Clamp velocity based on state using character-specific values
-    const maxVelX = this.isFlying() ? this.stats.flightMaxVelocityX : this.stats.maxVelocityX;
+    // Also apply charging penalty to flight speed
+    let maxVelX = this.isFlying() ? this.stats.flightMaxVelocityX : this.stats.maxVelocityX;
+    maxVelX *= chargingSpeedMultiplier;
     this.physics.clampVelocity(this.body, maxVelX);
   }
 
@@ -326,7 +340,7 @@ export default class Player {
 
   /**
    * Attempts to enter flight mode
-   * Requirements: must be airborne, have enough energy
+   * Requirements: must be airborne, have enough stamina
    * @returns {boolean} Whether flight was entered
    */
   enterFlight() {
@@ -335,8 +349,8 @@ export default class Player {
       return false;
     }
 
-    // Check energy requirement
-    if (this.energy < FLIGHT.minEnergyToFly) {
+    // Check stamina requirement
+    if (this.stamina < FLIGHT.minStaminaToFly) {
       return false;
     }
 
@@ -361,17 +375,20 @@ export default class Player {
   applyFlightThrust(horizontalInput, verticalInput) {
     if (!this.isFlying()) return;
 
+    // Apply charging penalty to flight thrust (30% power while charging)
+    const chargingMultiplier = this.isCharging ? KI_SYSTEM.chargeMovementPenalty : 1.0;
+
     // Calculate thrust vector using character-specific values
-    let thrustX = horizontalInput * this.stats.flightThrustForce;
+    let thrustX = horizontalInput * this.stats.flightThrustForce * chargingMultiplier;
 
     // Vertical thrust - use different force for up vs down
     let thrustY = 0;
     if (verticalInput < 0) {
       // Going up - need stronger thrust to overcome gravity
-      thrustY = verticalInput * this.stats.flightThrustUp;
+      thrustY = verticalInput * this.stats.flightThrustUp * chargingMultiplier;
     } else if (verticalInput > 0) {
       // Going down - gravity assists, less thrust needed
-      thrustY = verticalInput * this.stats.flightThrustDown;
+      thrustY = verticalInput * this.stats.flightThrustDown * chargingMultiplier;
     }
 
     // Apply thrust forces
@@ -379,31 +396,31 @@ export default class Player {
       this.physics.applyForce(this.body, { x: thrustX, y: thrustY });
     }
 
-    // Clamp flight velocity using character-specific limits
+    // Clamp flight velocity using character-specific limits (also reduced while charging)
     this.physics.clampVelocity(
       this.body,
-      this.stats.flightMaxVelocityX,
-      this.stats.flightMaxVelocityY
+      this.stats.flightMaxVelocityX * chargingMultiplier,
+      this.stats.flightMaxVelocityY * chargingMultiplier
     );
   }
 
   /**
-   * Consumes energy while flying
+   * Consumes stamina while flying
    * Called every frame during flight
    * Uses character-specific drain rate
    * @param {number} delta - Delta time in ms
-   * @returns {boolean} Whether energy was consumed (false = out of energy)
+   * @returns {boolean} Whether stamina was consumed (false = out of stamina)
    */
-  consumeFlightEnergy(delta) {
+  consumeFlightStamina(delta) {
     if (!this.isFlying()) return true;
 
     // Use character-specific drain rate
-    const drainAmount = this.stats.flightEnergyDrain * (delta / 16.67); // Normalize to 60fps
-    this.energy = Math.max(0, this.energy - drainAmount);
-    this.lastEnergyUse = this.scene.time.now;
+    const drainAmount = this.stats.flightStaminaDrain * (delta / 16.67); // Normalize to 60fps
+    this.stamina = Math.max(0, this.stamina - drainAmount);
+    this.lastStaminaUse = this.scene.time.now;
 
-    // Check if we ran out of energy
-    if (this.energy <= 0) {
+    // Check if we ran out of stamina
+    if (this.stamina <= 0) {
       this.exitFlight();
       return false;
     }
@@ -501,48 +518,177 @@ export default class Player {
     });
   }
 
-  // ==================== ENERGY ====================
+  // ==================== STAMINA ====================
 
   /**
-   * Uses energy for an action
+   * Uses stamina for an action
    * @param {number} amount - Amount to use
-   * @returns {boolean} Whether energy was successfully used
+   * @returns {boolean} Whether stamina was successfully used
    */
-  useEnergy(amount) {
-    if (this.energy < amount) return false;
+  useStamina(amount) {
+    if (this.stamina < amount) return false;
 
-    this.energy -= amount;
-    this.lastEnergyUse = this.scene.time.now;
+    this.stamina -= amount;
+    this.lastStaminaUse = this.scene.time.now;
     return true;
   }
 
   /**
-   * Regenerates energy over time
+   * Regenerates stamina over time
    * Rate varies based on state (slower in air but still regenerates)
    * Uses character-specific regeneration rates
    * @param {number} delta - Delta time in ms
    */
-  regenerateEnergy(delta) {
-    // Don't regen while flying (energy is being consumed)
+  regenerateStamina(delta) {
+    // Don't regen while flying (stamina is being consumed)
     if (this.isFlying()) return;
+    // Don't regen while charging Ki
+    if (this.isCharging) return;
 
     const now = this.scene.time.now;
 
-    // Don't regen if recently used energy (using character-specific delay)
-    if (now - this.lastEnergyUse < this.stats.energyRegenDelay) {
+    // Don't regen if recently used stamina (using character-specific delay)
+    if (now - this.lastStaminaUse < this.stats.staminaRegenDelay) {
       return;
     }
 
     // Determine regen rate based on state using character-specific values
-    // Energy regens in ALL non-flying states, just slower when airborne
+    // Stamina regens in ALL non-flying states, just slower when airborne
     const regenRate = this.state === PLAYER_STATES.GROUNDED
-      ? this.stats.energyRegenRate
-      : this.stats.energyRegenRateAir;
+      ? this.stats.staminaRegenRate
+      : this.stats.staminaRegenRateAir;
 
-    this.energy = Math.min(
-      this.stats.maxEnergy,
-      this.energy + regenRate * (delta / 16.67) // Normalize to 60fps
+    this.stamina = Math.min(
+      this.stats.maxStamina,
+      this.stamina + regenRate * (delta / 16.67) // Normalize to 60fps
     );
+  }
+
+  // ==================== KI / POWER GAUGE ====================
+
+  /**
+   * Adds Ki from combat actions
+   * @param {number} amount - Amount of Ki to gain
+   */
+  gainKi(amount) {
+    this.ki = Math.min(KI_SYSTEM.maxKi, this.ki + amount);
+    this.updateTransformationState();
+  }
+
+  /**
+   * Updates transformation availability based on Ki level
+   */
+  updateTransformationState() {
+    const kiPercent = (this.ki / KI_SYSTEM.maxKi) * 100;
+    this.hasPartialPower = kiPercent >= KI_SYSTEM.partialPowerThreshold;
+
+    const wasTransformReady = this.canTransform;
+    this.canTransform = kiPercent >= KI_SYSTEM.transformationThreshold;
+
+    // Track when transformation first becomes available
+    if (this.canTransform && !wasTransformReady) {
+      this.transformationReadyTime = this.scene.time.now;
+    }
+  }
+
+  /**
+   * Checks if transformation timeout has expired and resets Ki if so
+   * Called every frame in update()
+   */
+  checkTransformationTimeout() {
+    if (!this.canTransform) return;
+
+    const now = this.scene.time.now;
+    const elapsed = now - this.transformationReadyTime;
+
+    if (elapsed >= KI_SYSTEM.transformationTimeout) {
+      // Timeout expired - reset Ki and transformation state
+      this.ki = 0;
+      this.canTransform = false;
+      this.hasPartialPower = false;
+      this.transformationReadyTime = 0;
+    }
+  }
+
+  /**
+   * Called when player lands a hit on opponent
+   * Gains Ki as a reward for aggression
+   */
+  onHitLanded() {
+    this.gainKi(KI_SYSTEM.kiGainOnHit);
+  }
+
+  /**
+   * Called when player's projectile hits opponent
+   */
+  onProjectileHit() {
+    this.gainKi(KI_SYSTEM.kiGainOnProjectileHit);
+  }
+
+  /**
+   * Starts charging Ki
+   * Can charge while grounded, airborne, or flying (not while stunned/dead)
+   */
+  startCharging() {
+    // Can't charge while stunned or dead
+    if (!this.canAct()) return false;
+    if (this.ki >= KI_SYSTEM.maxKi) return false; // Already at max
+
+    this.isCharging = true;
+    this.chargeStartTime = this.scene.time.now; // Track when charge began for ramp
+    this.stateBeforeCharging = this.state;
+    return true;
+  }
+
+  /**
+   * Stops charging Ki
+   * Resets the charge ramp - next charge starts from slow baseline
+   */
+  stopCharging() {
+    this.isCharging = false;
+    this.chargeStartTime = 0; // Reset ramp on release
+    this.stateBeforeCharging = null;
+  }
+
+  /**
+   * Calculates the current charge rate based on how long charging has been held
+   * Uses smooth ramp from base rate to max rate over chargeRampTime
+   * @returns {number} Current charge rate
+   */
+  getChargeRate() {
+    const now = this.scene.time.now;
+    const holdDuration = now - this.chargeStartTime;
+
+    // Calculate ramp progress (0 to 1) with smooth easing
+    const rampProgress = Math.min(1, holdDuration / KI_SYSTEM.chargeRampTime);
+
+    // Use ease-in curve (quadratic) - starts slow, speeds up gradually
+    // This punishes tap-spamming as short presses stay in the slow zone
+    const easedProgress = rampProgress * rampProgress;
+
+    // Interpolate between base and max rate
+    const baseRate = KI_SYSTEM.chargeRateBase;
+    const maxRate = KI_SYSTEM.chargeRateMax;
+    return baseRate + (maxRate - baseRate) * easedProgress;
+  }
+
+  /**
+   * Updates Ki charging - called every frame while charging
+   * Uses ramping charge rate that rewards sustained holding
+   * @param {number} delta - Delta time in ms
+   */
+  updateCharging(delta) {
+    if (!this.isCharging) return;
+
+    // Get current charge rate based on hold duration (ramps up over time)
+    const currentRate = this.getChargeRate();
+    const chargeAmount = currentRate * (delta / 16.67); // Normalize to 60fps
+    this.gainKi(chargeAmount);
+
+    // Stop charging if at max
+    if (this.ki >= KI_SYSTEM.maxKi) {
+      this.stopCharging();
+    }
   }
 
   // ==================== LIFECYCLE ====================
@@ -563,10 +709,16 @@ export default class Player {
    */
   reset(x, y) {
     this.health = this.stats.maxHealth;
-    this.energy = this.stats.maxEnergy;
+    this.stamina = this.stats.maxStamina;
+    this.ki = 0; // Reset Ki gauge on respawn
     this.damageTaken = 0;
     this.jumpsRemaining = PLAYER_MOVEMENT.maxJumps;
     this.isInvincible = false;
+    this.isCharging = false;
+    this.chargeStartTime = 0;
+    this.canTransform = false;
+    this.hasPartialPower = false;
+    this.transformationReadyTime = 0;
     this.state = PLAYER_STATES.AIRBORNE;
 
     // Reset physics
@@ -609,8 +761,14 @@ export default class Player {
     // Update flight gravity compensation (disabled when pressing down for controlled descent)
     this.updateFlightGravity(isPressingDown);
 
-    // Regenerate energy
-    this.regenerateEnergy(delta);
+    // Regenerate stamina (not Ki - Ki must be earned)
+    this.regenerateStamina(delta);
+
+    // Update Ki charging if active
+    this.updateCharging(delta);
+
+    // Check if transformation timeout has expired
+    this.checkTransformationTimeout();
 
     // Update visuals
     this.updateVisuals();
@@ -646,6 +804,14 @@ export default class Player {
     let alpha = 1;
 
     // Modify appearance based on state
+    if (this.isCharging) {
+      // Charging Ki: Pulsing golden aura
+      const pulseSize = PLAYER_BODY.width * (0.9 + Math.sin(this.scene.time.now / 100) * 0.2);
+      this.graphics.fillStyle(0xf1c40f, 0.3);
+      this.graphics.fillCircle(x, y, pulseSize);
+      outlineColor = 0xf1c40f; // Golden outline while charging
+    }
+
     if (this.isFlying()) {
       // Flying: Add golden glow effect
       outlineColor = 0xf1c40f; // Golden outline
@@ -662,6 +828,14 @@ export default class Player {
     if (this.state === PLAYER_STATES.STUNNED) {
       // Stunned: Flash red
       color = 0xff6b6b;
+    }
+
+    // Transformation ready glow
+    if (this.canTransform) {
+      // Bright pulsing aura when transformation is available
+      const transAura = PLAYER_BODY.width * (1.0 + Math.sin(this.scene.time.now / 150) * 0.15);
+      this.graphics.fillStyle(0xf1c40f, 0.15);
+      this.graphics.fillCircle(x, y, transAura);
     }
 
     // Draw body
