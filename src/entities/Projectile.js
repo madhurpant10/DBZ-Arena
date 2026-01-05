@@ -17,12 +17,13 @@ export default class Projectile {
    * @param {number} y - Start Y position
    * @param {Object} targetPos - Target position { x, y } to aim at
    * @param {number} facingDirection - Fallback direction if no target (1 or -1)
+   * @param {number} damage - Damage dealt on hit (from character stats)
    */
-  constructor(scene, physicsSystem, ownerPlayerNumber, x, y, targetPos, facingDirection = 1) {
+  constructor(scene, physicsSystem, ownerPlayerNumber, x, y, targetPos, facingDirection = 1, damage = PROJECTILE.damage) {
     this.scene = scene;
     this.physics = physicsSystem;
     this.ownerPlayerNumber = ownerPlayerNumber;
-    this.damage = PROJECTILE.damage;
+    this.damage = damage;
 
     // Calculate direction vector toward target
     const directionVector = this.calculateDirection(x, y, targetPos, facingDirection);

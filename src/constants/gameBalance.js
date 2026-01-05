@@ -53,6 +53,34 @@ export const KI_SYSTEM = {
 
   // Transformation timeout - player must use it or lose it
   transformationTimeout: 20000, // Milliseconds before Ki resets if transformation not used (20 sec)
+
+  // Transformation duration (how long the power-up lasts once activated)
+  transformationDuration: 15000, // 15 seconds of powered-up state
+};
+
+/**
+ * Transformation stat bonuses
+ * Applied when player activates transformation at 100% Ki
+ */
+export const TRANSFORMATION_BONUSES = {
+  // Damage boost - attacks hit harder
+  damageMultiplier: 1.25, // 25% more damage
+
+  // Defense boost - take less damage
+  defenseMultiplier: 0.85, // Take 15% less damage (multiplied to incoming damage)
+
+  // Health bonus - gain extra max health during transformation
+  maxHealthBonus: 20, // +20 max health (and heal that amount on transform)
+
+  // Stamina bonus - more stamina pool and faster regen
+  maxStaminaBonus: 20, // +20 max stamina
+  staminaRegenMultiplier: 1.3, // 30% faster stamina regen
+
+  // Speed boost - faster movement
+  speedMultiplier: 1.1, // 10% faster movement speed
+
+  // Flight efficiency - fly longer
+  flightDrainMultiplier: 0.75, // 25% less stamina drain while flying
 };
 
 /**

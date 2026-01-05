@@ -291,6 +291,9 @@ export default class GameScene extends Phaser.Scene {
 
       const airFriction = player.body ? player.body.frictionAir : 'N/A';
       const stats = player.getStats();
+      const transformTime = player.isTransformed
+        ? Math.ceil((player.transformationEndTime - this.time.now) / 1000)
+        : 0;
       const info = [
         `P${player.playerNumber} Debug:`,
         `State: ${state}`,
@@ -300,8 +303,8 @@ export default class GameScene extends Phaser.Scene {
         `Flying: ${player.isFlying() ? 'YES' : 'NO'}`,
         `Charging: ${player.isCharging ? 'YES' : 'NO'}`,
         `CanTrans: ${player.canTransform ? 'YES' : 'NO'}`,
-        `Jumps: ${player.jumpsRemaining}`,
-        `AirFric: ${typeof airFriction === 'number' ? airFriction.toFixed(3) : airFriction}`,
+        `Transformed: ${player.isTransformed ? `YES (${transformTime}s)` : 'NO'}`,
+        `AtkDmg: ${stats.attackDamage.toFixed(1)}`,
       ].join('\n');
 
       const debugText = index === 0 ? this.debugTexts.p1 : this.debugTexts.p2;
@@ -540,8 +543,8 @@ export default class GameScene extends Phaser.Scene {
       hud.healthBar.fillRoundedRect(0, 30, healthWidth, UI.healthBarHeight / 2, { tl: 3, tr: 3, bl: 0, br: 0 });
     }
 
-    // Update health text
-    hud.healthText.setText(Math.ceil(player.health).toString());
+    // Update health text (show 1 decimal place for precise damage tracking)
+    hud.healthText.setText(player.health.toFixed(1));
 
     // Update stamina bar with cyan/blue color
     hud.staminaBar.clear();
@@ -801,10 +804,16 @@ export default class GameScene extends Phaser.Scene {
       this.handlePlayerAttack(player);
     }
 
-    // Ki Charging (hold special key while grounded)
+    // Ki Charging / Transformation (special key: G for P1, K for P2)
+    // - Hold to charge Ki
+    // - When Ki reaches 100%, transformation activates automatically
+    // - Can also press special when Ki is full (not charging) to transform
     if (input.special) {
-      // Try to start charging if not already
-      if (!player.isCharging) {
+      // If can transform and still holding charge key, auto-activate
+      if (player.canTransform && !player.isTransformed) {
+        player.activateTransformation();
+      } else if (!player.isCharging && !player.isTransformed) {
+        // Start charging if not already and not transformed
         player.startCharging();
       }
     } else {
@@ -852,7 +861,10 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Create projectile factory with targeting
+    // Get character-specific attack damage (includes transformation bonus if active)
+    const stats = player.getStats();
+
+    // Create projectile factory with targeting and character damage
     const createProjectile = () => {
       return new Projectile(
         this,
@@ -861,7 +873,8 @@ export default class GameScene extends Phaser.Scene {
         pos.x + player.facingDirection * 40, // Spawn in front of player
         pos.y,
         targetPos, // Target opponent's position (null if not facing them)
-        player.facingDirection // Fallback direction if no target
+        player.facingDirection, // Fallback direction if no target
+        stats.attackDamage // Use character-specific damage
       );
     };
 

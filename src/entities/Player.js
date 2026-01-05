@@ -1,4 +1,4 @@
-import { PLAYER_STATS, COMBAT, PLAYER_STATES, FLIGHT, KI_SYSTEM } from '../constants/gameBalance.js';
+import { PLAYER_STATS, COMBAT, PLAYER_STATES, FLIGHT, KI_SYSTEM, TRANSFORMATION_BONUSES } from '../constants/gameBalance.js';
 import { PLAYER_BODY, PLAYER_MOVEMENT, COMBAT_PHYSICS, FLIGHT_PHYSICS } from '../constants/physics.js';
 import { logDebug, logInfo } from '../utils/debug.js';
 import { getDefaultCharacter } from '../characters/index.js';
@@ -55,6 +55,8 @@ export default class Player {
     this.canTransform = false; // Set to true when Ki reaches 100%
     this.hasPartialPower = false; // Set to true when Ki reaches 50%
     this.transformationReadyTime = 0; // Timestamp when canTransform became true
+    this.isTransformed = false; // Currently in powered-up state
+    this.transformationEndTime = 0; // When the transformation expires
 
     // Timing
     this.lastStaminaUse = 0; // Renamed from lastEnergyUse
@@ -446,16 +448,23 @@ export default class Player {
 
   /**
    * Takes damage from an attack
+   * Applies transformation defense bonus if transformed
    * @param {number} amount - Damage amount
    */
   takeDamage(amount) {
     if (this.isInvincible) return;
     if (this.state === PLAYER_STATES.DEAD) return;
 
-    this.health = Math.max(0, this.health - amount);
-    this.damageTaken += amount;
+    // Apply defense bonus if transformed (reduces incoming damage)
+    let actualDamage = amount;
+    if (this.isTransformed) {
+      actualDamage = amount * TRANSFORMATION_BONUSES.defenseMultiplier;
+    }
 
-    logDebug(`Player ${this.playerNumber}: Took ${amount} damage (HP: ${this.health})`);
+    this.health = Math.max(0, this.health - actualDamage);
+    this.damageTaken += actualDamage;
+
+    logDebug(`Player ${this.playerNumber}: Took ${actualDamage.toFixed(1)} damage (HP: ${this.health})${this.isTransformed ? ' [TRANSFORMED]' : ''}`);
 
     // Apply invincibility frames
     this.setInvincible(COMBAT.invincibilityDuration);
@@ -596,6 +605,8 @@ export default class Player {
    * Called every frame in update()
    */
   checkTransformationTimeout() {
+    // Don't timeout if already transformed
+    if (this.isTransformed) return;
     if (!this.canTransform) return;
 
     const now = this.scene.time.now;
@@ -607,6 +618,67 @@ export default class Player {
       this.canTransform = false;
       this.hasPartialPower = false;
       this.transformationReadyTime = 0;
+      logDebug(`Player ${this.playerNumber}: Transformation timed out - Ki reset`);
+    }
+  }
+
+  /**
+   * Activates transformation when Ki is at 100%
+   * Consumes Ki and grants stat bonuses for a duration
+   * @returns {boolean} Whether transformation was successful
+   */
+  activateTransformation() {
+    if (!this.canTransform) return false;
+    if (this.isTransformed) return false; // Already transformed
+
+    // Activate transformation
+    this.isTransformed = true;
+    this.transformationEndTime = this.scene.time.now + KI_SYSTEM.transformationDuration;
+
+    // Consume Ki
+    this.ki = 0;
+    this.canTransform = false;
+    this.hasPartialPower = false;
+    this.transformationReadyTime = 0;
+
+    // Heal the bonus health amount (reward for transforming)
+    const healthBonus = TRANSFORMATION_BONUSES.maxHealthBonus;
+    this.health = Math.min(this.health + healthBonus, this.getStats().maxHealth);
+
+    // Boost stamina to new max
+    const staminaBonus = TRANSFORMATION_BONUSES.maxStaminaBonus;
+    this.stamina = Math.min(this.stamina + staminaBonus, this.getStats().maxStamina);
+
+    logInfo(`Player ${this.playerNumber}: TRANSFORMED! Duration: ${KI_SYSTEM.transformationDuration / 1000}s`);
+    return true;
+  }
+
+  /**
+   * Ends the transformation, returning to base stats
+   */
+  endTransformation() {
+    if (!this.isTransformed) return;
+
+    this.isTransformed = false;
+    this.transformationEndTime = 0;
+
+    // Clamp health/stamina to base max values
+    this.health = Math.min(this.health, this.stats.maxHealth);
+    this.stamina = Math.min(this.stamina, this.stats.maxStamina);
+
+    logInfo(`Player ${this.playerNumber}: Transformation ended`);
+  }
+
+  /**
+   * Checks if transformation duration has expired
+   * Called every frame in update()
+   */
+  checkTransformationExpiry() {
+    if (!this.isTransformed) return;
+
+    const now = this.scene.time.now;
+    if (now >= this.transformationEndTime) {
+      this.endTransformation();
     }
   }
 
@@ -719,6 +791,8 @@ export default class Player {
     this.canTransform = false;
     this.hasPartialPower = false;
     this.transformationReadyTime = 0;
+    this.isTransformed = false; // End any active transformation
+    this.transformationEndTime = 0;
     this.state = PLAYER_STATES.AIRBORNE;
 
     // Reset physics
@@ -767,8 +841,11 @@ export default class Player {
     // Update Ki charging if active
     this.updateCharging(delta);
 
-    // Check if transformation timeout has expired
+    // Check if transformation timeout has expired (use it or lose it)
     this.checkTransformationTimeout();
+
+    // Check if transformation duration has expired
+    this.checkTransformationExpiry();
 
     // Update visuals
     this.updateVisuals();
@@ -830,12 +907,27 @@ export default class Player {
       color = 0xff6b6b;
     }
 
-    // Transformation ready glow
-    if (this.canTransform) {
+    // Transformation ready glow (pulsing to indicate "press to transform")
+    if (this.canTransform && !this.isTransformed) {
       // Bright pulsing aura when transformation is available
       const transAura = PLAYER_BODY.width * (1.0 + Math.sin(this.scene.time.now / 150) * 0.15);
       this.graphics.fillStyle(0xf1c40f, 0.15);
       this.graphics.fillCircle(x, y, transAura);
+    }
+
+    // Active transformation - intense glowing aura
+    if (this.isTransformed) {
+      // Larger, more intense aura
+      const transformAura = PLAYER_BODY.width * (1.2 + Math.sin(this.scene.time.now / 80) * 0.1);
+      this.graphics.fillStyle(0xffff00, 0.25); // Bright yellow
+      this.graphics.fillCircle(x, y, transformAura);
+
+      // Inner intense glow
+      this.graphics.fillStyle(0xffffff, 0.15);
+      this.graphics.fillCircle(x, y, PLAYER_BODY.width * 0.7);
+
+      // Override outline to bright gold
+      outlineColor = 0xffd700;
     }
 
     // Draw body
@@ -914,11 +1006,31 @@ export default class Player {
   }
 
   /**
-   * Gets the computed stats
-   * @returns {Object} Stats object
+   * Gets the computed stats with transformation bonuses applied if transformed
+   * @returns {Object} Stats object (with transformation bonuses if active)
    */
   getStats() {
-    return this.stats;
+    // If not transformed, return base stats
+    if (!this.isTransformed) {
+      return this.stats;
+    }
+
+    // Apply transformation bonuses to relevant stats
+    const tb = TRANSFORMATION_BONUSES;
+    return {
+      ...this.stats,
+      // Boosted stats during transformation
+      maxHealth: this.stats.maxHealth + tb.maxHealthBonus,
+      maxStamina: this.stats.maxStamina + tb.maxStaminaBonus,
+      attackDamage: this.stats.attackDamage * tb.damageMultiplier,
+      maxVelocityX: this.stats.maxVelocityX * tb.speedMultiplier,
+      moveForce: this.stats.moveForce * tb.speedMultiplier,
+      flightStaminaDrain: this.stats.flightStaminaDrain * tb.flightDrainMultiplier,
+      staminaRegenRate: this.stats.staminaRegenRate * tb.staminaRegenMultiplier,
+      staminaRegenRateAir: this.stats.staminaRegenRateAir * tb.staminaRegenMultiplier,
+      flightMaxVelocityX: this.stats.flightMaxVelocityX * tb.speedMultiplier,
+      flightMaxVelocityY: this.stats.flightMaxVelocityY * tb.speedMultiplier,
+    };
   }
 
   // ==================== CLEANUP ====================
