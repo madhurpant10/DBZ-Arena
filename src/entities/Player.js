@@ -545,30 +545,32 @@ export default class Player {
   /**
    * Regenerates stamina over time
    * Rate varies based on state (slower in air but still regenerates)
-   * Uses character-specific regeneration rates
+   * Uses character-specific regeneration rates (includes transformation bonuses)
    * @param {number} delta - Delta time in ms
    */
   regenerateStamina(delta) {
     // Don't regen while flying (stamina is being consumed)
     if (this.isFlying()) return;
-    // Don't regen while charging Ki
-    if (this.isCharging) return;
+    // Stamina DOES regen while charging Ki - charging only slows movement, not recovery
 
+    // Get current stats (includes transformation bonuses if active)
+    const stats = this.getStats();
     const now = this.scene.time.now;
 
     // Don't regen if recently used stamina (using character-specific delay)
-    if (now - this.lastStaminaUse < this.stats.staminaRegenDelay) {
+    if (now - this.lastStaminaUse < stats.staminaRegenDelay) {
       return;
     }
 
     // Determine regen rate based on state using character-specific values
     // Stamina regens in ALL non-flying states, just slower when airborne
+    // Transformation bonus applies here (30% faster regen when transformed)
     const regenRate = this.state === PLAYER_STATES.GROUNDED
-      ? this.stats.staminaRegenRate
-      : this.stats.staminaRegenRateAir;
+      ? stats.staminaRegenRate
+      : stats.staminaRegenRateAir;
 
     this.stamina = Math.min(
-      this.stats.maxStamina,
+      stats.maxStamina,
       this.stamina + regenRate * (delta / 16.67) // Normalize to 60fps
     );
   }
@@ -659,12 +661,20 @@ export default class Player {
   endTransformation() {
     if (!this.isTransformed) return;
 
+    // Store transformed max values before ending transformation
+    const transformedMaxHealth = this.getStats().maxHealth;
+    const transformedMaxStamina = this.getStats().maxStamina;
+
     this.isTransformed = false;
     this.transformationEndTime = 0;
 
-    // Clamp health/stamina to base max values
-    this.health = Math.min(this.health, this.stats.maxHealth);
-    this.stamina = Math.min(this.stamina, this.stats.maxStamina);
+    // Scale health/stamina proportionally to maintain the same percentage
+    // This prevents the bar from appearing to "jump up" when transformation ends
+    const healthRatio = this.health / transformedMaxHealth;
+    const staminaRatio = this.stamina / transformedMaxStamina;
+
+    this.health = Math.min(healthRatio * this.stats.maxHealth, this.stats.maxHealth);
+    this.stamina = Math.min(staminaRatio * this.stats.maxStamina, this.stats.maxStamina);
 
     logInfo(`Player ${this.playerNumber}: Transformation ended`);
   }

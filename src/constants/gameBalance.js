@@ -74,10 +74,10 @@ export const TRANSFORMATION_BONUSES = {
 
   // Stamina bonus - more stamina pool and faster regen
   maxStaminaBonus: 20, // +20 max stamina
-  staminaRegenMultiplier: 1.3, // 30% faster stamina regen
+  staminaRegenMultiplier: 1.6, // 60% faster stamina regen
 
   // Speed boost - faster movement
-  speedMultiplier: 1.1, // 10% faster movement speed
+  speedMultiplier: 1.3, // 30% faster movement speed
 
   // Flight efficiency - fly longer
   flightDrainMultiplier: 0.75, // 25% less stamina drain while flying
