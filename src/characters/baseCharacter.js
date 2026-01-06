@@ -60,11 +60,11 @@ export const BASE_CHARACTER = {
   maxHealth: 100,
 
   /**
-   * Maximum energy/ki points
-   * Range: 80-150 (100 is baseline)
+   * Maximum energy/ki points (stamina)
+   * Range: 100-180 (130 is baseline for larger arena)
    * @type {number}
    */
-  maxEnergy: 100,
+  maxEnergy: 130,
 
   // ==================== MOVEMENT ====================
 

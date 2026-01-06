@@ -25,7 +25,7 @@ const goku = createCharacter({
 
   // Core Stats
   maxHealth: 90, // Lower health - high risk, high reward
-  maxEnergy: 110, // Slightly more ki
+  maxEnergy: 143, // Slightly more ki (10% above baseline)
 
   // Movement - Fast and nimble
   moveSpeedMultiplier: 1.2, // 20% faster acceleration

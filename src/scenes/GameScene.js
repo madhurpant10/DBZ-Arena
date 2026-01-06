@@ -2,9 +2,10 @@ import Phaser from 'phaser';
 import InputSystem from '../systems/InputSystem.js';
 import PhysicsSystem from '../systems/PhysicsSystem.js';
 import CombatSystem from '../systems/CombatSystem.js';
+import CameraSystem from '../systems/CameraSystem.js';
 import Player from '../entities/Player.js';
 import Projectile from '../entities/Projectile.js';
-import { ARENA, UI, PLAYER_STATS, PLAYER_STATES, KI_SYSTEM } from '../constants/gameBalance.js';
+import { ARENA, UI, PLAYER_STATS, PLAYER_STATES, KI_SYSTEM, CAMERA } from '../constants/gameBalance.js';
 import { DEBUG_CONTROLS } from '../constants/controls.js';
 import { debug, logInfo } from '../utils/debug.js';
 import { getDefaultCharacter } from '../characters/index.js';
@@ -21,6 +22,7 @@ export default class GameScene extends Phaser.Scene {
     this.inputSystem = null;
     this.physicsSystem = null;
     this.combatSystem = null;
+    this.cameraSystem = null;
 
     // Entities
     this.players = [];
@@ -49,6 +51,8 @@ export default class GameScene extends Phaser.Scene {
     this.inputSystem = null;
     this.physicsSystem = null;
     this.combatSystem = null;
+    this.cameraSystem = null;
+    this.uiCamera = null;
     this.players = [];
     this.hudElements = {};
     this.isPaused = false;
@@ -57,6 +61,7 @@ export default class GameScene extends Phaser.Scene {
     this.pauseText = null;
     this.pauseHint = null;
     this.debugTexts = null;
+    this.arenaBackground = null;
 
     this.gameMode = data.mode || 'local1v1';
 
@@ -159,87 +164,80 @@ export default class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Creates arena background visuals
+   * Creates arena background visuals for the expanded arena
+   * Background spans the full arena size (larger than viewport)
    */
   createArenaBackground() {
-    const { width, height } = this.cameras.main;
+    const arenaWidth = ARENA.width;
+    const arenaHeight = ARENA.height;
+    const groundY = ARENA.groundY;
     const groundHeight = ARENA.groundHeight;
 
     const bg = this.add.graphics();
 
-    // Sky gradient
-    bg.fillGradientStyle(0x1a1a2e, 0x1a1a2e, 0x2d3436, 0x2d3436, 1);
-    bg.fillRect(0, 0, width, height - groundHeight);
+    // Sky area (above ground) - gradient from dark blue to slightly lighter
+    bg.fillGradientStyle(0x0a0a1a, 0x0a0a1a, 0x1a1a2e, 0x1a1a2e, 1);
+    bg.fillRect(-200, -400, arenaWidth + 400, groundY + 400);
+
+    // Ground area - darker ground color
+    bg.fillStyle(0x2d3436, 1);
+    bg.fillRect(0, groundY, arenaWidth, groundHeight + 500);
+
+    // Ground line (top of ground)
+    bg.lineStyle(3, 0x636e72, 1);
+    bg.lineBetween(0, groundY, arenaWidth, groundY);
+
+    // Add some depth lines for visual interest
+    bg.lineStyle(1, 0x3d4d56, 0.3);
+    for (let y = groundY + 20; y < groundY + groundHeight; y += 20) {
+      bg.lineBetween(0, y, arenaWidth, y);
+    }
 
     // Set depth to be behind everything
     bg.setDepth(-100);
+
+    // Store reference for potential updates
+    this.arenaBackground = bg;
   }
 
   /**
-   * Sets up camera to follow players during flight
-   * Camera smoothly follows the midpoint between both players
+   * Sets up the dynamic camera system
+   * Uses CameraSystem for midpoint tracking and distance-based zoom
    */
   setupCamera() {
-    const camera = this.cameras.main;
-    const { width, height } = camera;
+    // Initialize the camera system
+    this.cameraSystem = new CameraSystem(this);
 
-    // Set camera bounds to be slightly larger than arena for flight
-    // This allows the camera to pan up when players fly
-    const extraHeight = 400; // Extra space above for flight
-    camera.setBounds(0, -extraHeight, width, height + extraHeight);
+    // Set players for tracking (will be set again after players are created)
+    if (this.players.length >= 2) {
+      this.cameraSystem.setPlayers(this.players);
+      this.cameraSystem.snapToTarget();
+    }
 
-    // Disable default follow, we'll manually update camera position
-    // to keep both players in view
+    logInfo('GameScene: Camera system initialized');
   }
 
   /**
-   * Updates camera position to keep both players visible
+   * Updates camera position and zoom to keep both players visible
    * Called every frame in update()
    */
-  updateCamera() {
-    if (this.players.length < 2) return;
+  updateCamera(delta) {
+    if (!this.cameraSystem) return;
 
-    const p1Pos = this.players[0].getPosition();
-    const p2Pos = this.players[1].getPosition();
-
-    // Calculate midpoint between players
-    const midX = (p1Pos.x + p2Pos.x) / 2;
-    const midY = (p1Pos.y + p2Pos.y) / 2;
-
-    const camera = this.cameras.main;
-    const { width, height } = camera;
-
-    // Calculate target Y position (only move camera when players are high up)
-    // Camera centers on players when they're above a threshold
-    const groundY = height - ARENA.groundHeight;
-    const flightThreshold = groundY - 200; // Start following when above this Y
-
-    let targetY = height / 2; // Default center
-
-    // If either player is flying high, adjust camera Y
-    const minPlayerY = Math.min(p1Pos.y, p2Pos.y);
-    if (minPlayerY < flightThreshold) {
-      // Blend between default and following the midpoint
-      const followStrength = Math.min(1, (flightThreshold - minPlayerY) / 200);
-      targetY = height / 2 + (midY - height / 2) * followStrength * 0.5;
+    // Ensure camera system has player references
+    if (this.players.length >= 2 && this.cameraSystem.players.length === 0) {
+      this.cameraSystem.setPlayers(this.players);
+      this.cameraSystem.snapToTarget();
     }
 
-    // Smoothly move camera (lerp)
-    const currentY = camera.scrollY + height / 2;
-    const lerpSpeed = 0.05;
-    const newY = currentY + (targetY - currentY) * lerpSpeed;
-
-    // Clamp to bounds
-    const minY = -200; // Don't go too high
-    const maxY = height / 2; // Don't go below default
-    camera.scrollY = Math.max(minY, Math.min(maxY, newY - height / 2));
+    this.cameraSystem.update(delta);
   }
 
   /**
    * Creates debug display for player states (shown when debug mode is on)
    */
   createDebugDisplay() {
-    const { width } = this.cameras.main;
+    const width = CAMERA.viewportWidth;
 
     // Create container for debug info
     this.debugTexts = {
@@ -262,10 +260,13 @@ export default class GameScene extends Phaser.Scene {
     // Set depth and initial visibility
     this.debugTexts.p1.setDepth(1000);
     this.debugTexts.p2.setDepth(1000);
-    this.debugTexts.p1.setScrollFactor(0); // Fixed to camera
+    this.debugTexts.p1.setScrollFactor(0);
     this.debugTexts.p2.setScrollFactor(0);
     this.debugTexts.p1.setVisible(false);
     this.debugTexts.p2.setVisible(false);
+
+    // Main camera ignores debug texts (UI camera will render them)
+    this.cameras.main.ignore([this.debugTexts.p1, this.debugTexts.p2]);
   }
 
   /**
@@ -289,11 +290,18 @@ export default class GameScene extends Phaser.Scene {
       const ki = Math.round(player.ki);
       const health = Math.round(player.health);
 
-      const airFriction = player.body ? player.body.frictionAir : 'N/A';
       const stats = player.getStats();
       const transformTime = player.isTransformed
         ? Math.ceil((player.transformationEndTime - this.time.now) / 1000)
         : 0;
+
+      // Add camera info for P1 debug
+      let cameraInfo = '';
+      if (index === 0 && this.cameraSystem) {
+        const camDebug = this.cameraSystem.getDebugInfo();
+        cameraInfo = `\n--- Camera ---\nPos: (${camDebug.position.x}, ${camDebug.position.y})\nZoom: ${camDebug.zoom}`;
+      }
+
       const info = [
         `P${player.playerNumber} Debug:`,
         `State: ${state}`,
@@ -305,6 +313,7 @@ export default class GameScene extends Phaser.Scene {
         `CanTrans: ${player.canTransform ? 'YES' : 'NO'}`,
         `Transformed: ${player.isTransformed ? `YES (${transformTime}s)` : 'NO'}`,
         `AtkDmg: ${stats.attackDamage.toFixed(1)}`,
+        cameraInfo,
       ].join('\n');
 
       const debugText = index === 0 ? this.debugTexts.p1 : this.debugTexts.p2;
@@ -352,9 +361,19 @@ export default class GameScene extends Phaser.Scene {
 
   /**
    * Creates the HUD display
+   * Uses a separate UI camera that doesn't zoom to keep HUD at consistent size
    */
   createHUD() {
-    const { width } = this.cameras.main;
+    const { width, height } = this.cameras.main;
+
+    // Create a dedicated UI camera that ignores zoom
+    // This camera only renders UI elements (depth >= 100)
+    this.uiCamera = this.cameras.add(0, 0, width, height);
+    this.uiCamera.setScroll(0, 0);
+    this.uiCamera.setZoom(1); // Always 1:1 zoom for UI
+
+    // Main camera should ignore UI elements
+    this.cameras.main.ignore([]);
 
     // Player 1 HUD (left side)
     this.hudElements.p1 = this.createPlayerHUD(1, UI.hudPadding, UI.hudPadding);
@@ -376,8 +395,51 @@ export default class GameScene extends Phaser.Scene {
     });
     this.hudElements.centerText.setOrigin(0.5);
     this.hudElements.centerText.setDepth(100);
+    this.hudElements.centerText.setScrollFactor(0);
+
+    // Make main camera ignore HUD elements, UI camera renders them
+    this.setupCameraLayers();
 
     logInfo('GameScene: HUD created');
+  }
+
+  /**
+   * Sets up camera layer separation
+   * Main camera renders game world, UI camera renders HUD
+   */
+  setupCameraLayers() {
+    // Collect all HUD elements to ignore from main camera
+    const hudObjects = [];
+
+    if (this.hudElements.p1) {
+      hudObjects.push(this.hudElements.p1.container);
+    }
+    if (this.hudElements.p2) {
+      hudObjects.push(this.hudElements.p2.container);
+    }
+    if (this.hudElements.centerText) {
+      hudObjects.push(this.hudElements.centerText);
+    }
+    if (this.debugTexts) {
+      if (this.debugTexts.p1) hudObjects.push(this.debugTexts.p1);
+      if (this.debugTexts.p2) hudObjects.push(this.debugTexts.p2);
+    }
+
+    // Main camera ignores HUD
+    this.cameras.main.ignore(hudObjects);
+
+    // UI camera only sees HUD (ignore everything else by setting to only render high depth)
+    // We'll handle this by making the UI camera ignore world objects
+    if (this.arenaBackground) {
+      this.uiCamera.ignore(this.arenaBackground);
+    }
+
+    // Ignore players
+    this.players.forEach(player => {
+      if (player.graphics) {
+        this.uiCamera.ignore(player.graphics);
+      }
+    });
   }
 
   /**
@@ -493,6 +555,7 @@ export default class GameScene extends Phaser.Scene {
     container.add(kiLabel);
 
     container.setDepth(100);
+    container.setScrollFactor(0); // Fixed to screen, not affected by camera movement
 
     return {
       container,
@@ -637,12 +700,15 @@ export default class GameScene extends Phaser.Scene {
    * Shows pause menu overlay
    */
   showPauseMenu() {
-    const { width, height } = this.cameras.main;
+    const width = CAMERA.viewportWidth;
+    const height = CAMERA.viewportHeight;
 
+    // Overlay covers full screen
     this.pauseOverlay = this.add.graphics();
     this.pauseOverlay.fillStyle(0x000000, 0.7);
     this.pauseOverlay.fillRect(0, 0, width, height);
     this.pauseOverlay.setDepth(200);
+    this.pauseOverlay.setScrollFactor(0);
 
     this.pauseText = this.add.text(width / 2, height / 2 - 50, 'PAUSED', {
       fontSize: '64px',
@@ -651,6 +717,7 @@ export default class GameScene extends Phaser.Scene {
     });
     this.pauseText.setOrigin(0.5);
     this.pauseText.setDepth(201);
+    this.pauseText.setScrollFactor(0);
 
     this.pauseHint = this.add.text(width / 2, height / 2 + 30, 'Press ESC to resume\nPress Q to quit', {
       fontSize: '24px',
@@ -660,6 +727,10 @@ export default class GameScene extends Phaser.Scene {
     });
     this.pauseHint.setOrigin(0.5);
     this.pauseHint.setDepth(201);
+    this.pauseHint.setScrollFactor(0);
+
+    // Make main camera ignore pause elements (UI camera will render them)
+    this.cameras.main.ignore([this.pauseOverlay, this.pauseText, this.pauseHint]);
 
     // Quit handler
     this.input.keyboard.once('keydown-Q', () => {
@@ -745,8 +816,8 @@ export default class GameScene extends Phaser.Scene {
     this.updatePlayerHUD(1);
     this.updatePlayerHUD(2);
 
-    // Update camera to follow players during flight
-    this.updateCamera();
+    // Update camera to follow players with dynamic zoom
+    this.updateCamera(delta);
 
     // Update debug display
     this.updateDebugDisplay();
@@ -904,6 +975,17 @@ export default class GameScene extends Phaser.Scene {
     if (this.physicsSystem) {
       this.physicsSystem.destroy();
       this.physicsSystem = null;
+    }
+
+    if (this.cameraSystem) {
+      this.cameraSystem.destroy();
+      this.cameraSystem = null;
+    }
+
+    // Remove UI camera
+    if (this.uiCamera) {
+      this.cameras.remove(this.uiCamera);
+      this.uiCamera = null;
     }
 
     // Destroy debug

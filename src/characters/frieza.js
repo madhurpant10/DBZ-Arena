@@ -25,7 +25,7 @@ const frieza = createCharacter({
 
   // Core Stats
   maxHealth: 85, // Lower health - fragile
-  maxEnergy: 120, // High ki pool for projectiles
+  maxEnergy: 156, // High ki pool for projectiles (20% above baseline)
 
   // Movement - Good lateral speed
   moveSpeedMultiplier: 1.05, // 5% faster

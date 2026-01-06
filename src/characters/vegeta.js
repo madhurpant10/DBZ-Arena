@@ -25,7 +25,7 @@ const vegeta = createCharacter({
 
   // Core Stats
   maxHealth: 115, // Higher health - can take more hits
-  maxEnergy: 95, // Slightly less ki
+  maxEnergy: 124, // Slightly less ki (5% below baseline)
 
   // Movement - Slightly slower
   moveSpeedMultiplier: 0.95, // 5% slower acceleration

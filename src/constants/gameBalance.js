@@ -18,14 +18,15 @@ export const PLAYER_STATES = {
 
 /**
  * Player stats
+ * Stamina increased for larger arena - more actions before needing to recover
  */
 export const PLAYER_STATS = {
   maxHealth: 100,
   // Stamina - used for attacks, flight, and special moves (auto-regenerates)
-  maxStamina: 100,
-  staminaRegenRate: 0.08, // Stamina per frame (normalized to 60fps) - slow regen, ~20 sec to full
-  staminaRegenDelay: 500, // Milliseconds after using stamina before regen starts
-  staminaRegenRateAir: 0.05, // Slower regen while airborne
+  maxStamina: 130, // Increased from 100 for larger arena playability
+  staminaRegenRate: 0.10, // Stamina per frame (normalized to 60fps) - slightly faster regen
+  staminaRegenDelay: 400, // Milliseconds after using stamina before regen starts (reduced)
+  staminaRegenRateAir: 0.07, // Slightly faster air regen for larger arena
 };
 
 /**
@@ -55,7 +56,8 @@ export const KI_SYSTEM = {
   transformationTimeout: 20000, // Milliseconds before Ki resets if transformation not used (20 sec)
 
   // Transformation duration (how long the power-up lasts once activated)
-  transformationDuration: 15000, // 15 seconds of powered-up state
+  // Increased for larger arena - more time to utilize the power-up
+  transformationDuration: 25000, // 25 seconds of powered-up state
 };
 
 /**
@@ -117,18 +119,70 @@ export const MATCH = {
 
 /**
  * Arena settings
+ * Arena is larger than the viewport to allow for dynamic camera movement
  */
 export const ARENA = {
-  width: 1280,
-  height: 720,
+  // Arena dimensions (larger than viewport for expansive combat)
+  width: 2560, // 2x viewport width
+  height: 1440, // 2x viewport height
+
+  // Ground settings
   groundHeight: 100, // Height of ground platform
+  groundY: 1000, // Y position of ground (near bottom of arena)
+
+  // Spawn points (centered horizontally, on the ground level)
   spawnPoints: {
-    player1: { x: 300, y: 500 },
-    player2: { x: 980, y: 500 },
+    player1: { x: 900, y: 850 },
+    player2: { x: 1660, y: 850 },
   },
+
+  // Death zones
   deathZone: {
-    // Y position below which players die
-    bottom: 800,
+    bottom: 1500, // Below arena
+    top: -200, // Above arena (optional)
+    left: -100, // Left of arena
+    right: 2660, // Right of arena
+  },
+
+  // Soft boundary push-back (prevents hard wall collisions)
+  softBoundary: {
+    margin: 100, // Distance from edge where push-back starts
+    pushForce: 0.008, // Force applied to push players back
+  },
+};
+
+/**
+ * Camera system settings
+ * Dynamic camera that frames both players with smooth zoom
+ */
+export const CAMERA = {
+  // Viewport dimensions (what the player sees)
+  viewportWidth: 1280,
+  viewportHeight: 720,
+
+  // Zoom limits
+  zoomMin: 0.5, // Maximum zoom out (see more of arena)
+  zoomMax: 1.2, // Maximum zoom in (close combat)
+  zoomDefault: 0.85, // Default zoom level
+
+  // Zoom behavior
+  zoomPadding: 200, // Extra padding around players when calculating zoom
+  zoomSmoothing: 0.03, // How quickly zoom changes (lower = slower/smoother)
+
+  // Position tracking
+  positionSmoothing: 0.05, // How quickly camera follows midpoint
+  verticalBias: 0.3, // Slight upward bias to show more sky during flight
+
+  // Bounds padding (how close camera can get to arena edges)
+  boundsPadding: {
+    horizontal: 100,
+    vertical: 50,
+  },
+
+  // Dead zone - camera won't move for small player movements
+  deadZone: {
+    width: 50,
+    height: 30,
   },
 };
 

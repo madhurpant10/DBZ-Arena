@@ -76,10 +76,11 @@ export const PROJECTILE_BODY = {
 
 /**
  * Projectile movement
+ * Speed increased for larger arena - maintains pressure across distance
  */
 export const PROJECTILE_MOVEMENT = {
-  speed: 12, // Velocity magnitude
-  lifetime: 2000, // Milliseconds before auto-destroy
+  speed: 18, // Velocity magnitude (increased for larger arena)
+  lifetime: 3000, // Milliseconds before auto-destroy (increased for arena coverage)
 };
 
 /**

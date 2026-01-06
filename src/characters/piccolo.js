@@ -25,7 +25,7 @@ const piccolo = createCharacter({
 
   // Core Stats
   maxHealth: 120, // Highest health - very tanky
-  maxEnergy: 105, // Good ki pool
+  maxEnergy: 137, // Good ki pool (5% above baseline)
 
   // Movement - Slower but deliberate
   moveSpeedMultiplier: 0.9, // 10% slower acceleration

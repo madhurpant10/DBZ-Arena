@@ -1,5 +1,5 @@
 import { PROJECTILE_BODY, PROJECTILE_MOVEMENT } from '../constants/physics.js';
-import { PROJECTILE } from '../constants/gameBalance.js';
+import { PROJECTILE, ARENA } from '../constants/gameBalance.js';
 import { logDebug } from '../utils/debug.js';
 
 /**
@@ -40,6 +40,12 @@ export default class Projectile {
 
     // Create visual representation
     this.graphics = this.createVisuals();
+
+    // Make UI camera ignore projectile graphics (prevents large ball glitch)
+    // The UI camera renders at fixed position, so world objects would appear at wrong coordinates
+    if (scene.uiCamera) {
+      scene.uiCamera.ignore(this.graphics);
+    }
 
     // Apply initial velocity in the calculated direction
     this.physics.setVelocity(this.body, {
@@ -173,11 +179,12 @@ export default class Projectile {
       return;
     }
 
-    // Check if out of bounds
-    const { width, height } = this.scene.cameras.main;
+    // Check if out of arena bounds (use arena dimensions, not viewport)
     const pos = this.body.position;
+    const padding = 100;
 
-    if (pos.x < -50 || pos.x > width + 50 || pos.y < -50 || pos.y > height + 50) {
+    if (pos.x < -padding || pos.x > ARENA.width + padding ||
+        pos.y < -padding - 400 || pos.y > ARENA.groundY + ARENA.groundHeight + padding) {
       this.shouldDestroy = true;
       return;
     }

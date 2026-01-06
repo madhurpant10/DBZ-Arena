@@ -57,60 +57,64 @@ export default class PhysicsSystem {
   }
 
   /**
-   * Creates world boundary walls
+   * Creates world boundary walls for the expanded arena
+   * Uses soft boundaries with push-back forces instead of hard walls
    */
   createWorldBounds() {
-    const { width, height } = this.scene.cameras.main;
+    // Use arena dimensions instead of camera viewport
+    const arenaWidth = ARENA.width;
+    const arenaHeight = ARENA.height;
     const wallThickness = 50;
 
     const wallOptions = {
-      friction: 0, // Zero friction so players don't slow down on walls
+      friction: 0,
       frictionStatic: 0,
-      restitution: 0,
+      restitution: 0.2, // Slight bounce for softer feel
       collisionFilter: {
-        category: this.categories.ground, // Use ground category (0x0004)
+        category: this.categories.ground,
         mask: this.categories.player | this.categories.projectile,
       },
     };
 
-    // Left wall
+    // Left wall (at arena left edge)
     this.createStaticBody(
       -wallThickness / 2,
-      height / 2,
+      arenaHeight / 2,
       wallThickness,
-      height,
+      arenaHeight * 2, // Extra tall to cover vertical movement
       { label: 'wallLeft', ...wallOptions }
     );
 
-    // Right wall
+    // Right wall (at arena right edge)
     this.createStaticBody(
-      width + wallThickness / 2,
-      height / 2,
+      arenaWidth + wallThickness / 2,
+      arenaHeight / 2,
       wallThickness,
-      height,
+      arenaHeight * 2,
       { label: 'wallRight', ...wallOptions }
     );
 
-    // Ceiling (optional - can be removed for death by falling up)
+    // Ceiling (high above arena)
     this.createStaticBody(
-      width / 2,
-      -wallThickness / 2,
-      width,
+      arenaWidth / 2,
+      -200 - wallThickness / 2, // Well above visible area
+      arenaWidth,
       wallThickness,
       { label: 'ceiling', ...wallOptions }
     );
   }
 
   /**
-   * Creates the ground platform
+   * Creates the ground platform spanning the full arena width
    * @returns {MatterJS.BodyType} The ground body
    */
   createGround() {
-    const { width, height } = this.scene.cameras.main;
+    // Use arena dimensions for ground
+    const arenaWidth = ARENA.width;
     const groundHeight = ARENA.groundHeight;
-    const groundY = height - groundHeight / 2;
+    const groundY = ARENA.groundY + groundHeight / 2;
 
-    const ground = this.matter.add.rectangle(width / 2, groundY, width, groundHeight, {
+    const ground = this.matter.add.rectangle(arenaWidth / 2, groundY, arenaWidth, groundHeight, {
       isStatic: true,
       friction: GROUND.friction,
       frictionStatic: GROUND.frictionStatic,
@@ -122,14 +126,8 @@ export default class PhysicsSystem {
       },
     });
 
-    // Visual representation
-    const graphics = this.scene.add.graphics();
-    graphics.fillStyle(0x2d3436, 1);
-    graphics.fillRect(0, height - groundHeight, width, groundHeight);
-
-    // Ground line
-    graphics.lineStyle(3, 0x636e72, 1);
-    graphics.lineBetween(0, height - groundHeight, width, height - groundHeight);
+    // Note: Visual representation is now handled by GameScene.createArenaBackground()
+    // for better control over depth and camera-relative positioning
 
     this.bodies.add(ground);
 
@@ -263,20 +261,18 @@ export default class PhysicsSystem {
   isOnGround(body) {
     if (!body || !body.bounds) return false;
 
-    // Get camera/world dimensions
-    const { height } = this.scene.cameras.main;
-    const groundHeight = 100; // From ARENA.groundHeight
-    const groundY = height - groundHeight;
+    // Use arena ground position
+    const groundY = ARENA.groundY;
 
     // Check if player's bottom is near the ground level
     // Add small tolerance for physics jitter
     const playerBottom = body.bounds.max.y;
-    const tolerance = 10; // Increased tolerance
+    const tolerance = 10;
 
     // Player is grounded if their bottom is at or near ground level
     // and they're not moving significantly upward
     const nearGround = playerBottom >= groundY - tolerance;
-    const notMovingUp = body.velocity.y >= -1; // More lenient
+    const notMovingUp = body.velocity.y >= -1;
 
     return nearGround && notMovingUp;
   }
