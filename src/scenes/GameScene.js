@@ -906,22 +906,80 @@ export default class GameScene extends Phaser.Scene {
     this.isGameOver = true;
 
     const winner = playerNumber === 1 ? 2 : 1;
+    const loser = this.players[playerNumber - 1];
 
     logInfo(`GameScene: Player ${winner} wins!`);
 
-    // Camera shake on KO for impact
+    // Pause input immediately
+    this.inputSystem.setEnabled(false);
+
+    // === DRAMATIC KO SEQUENCE ===
+
+    // 1. Brief freeze frame - pause physics for impact moment
+    this.matter.world.pause();
+
+    // 2. Camera shake on KO
     if (this.cameraSystem) {
       this.cameraSystem.shakeOnKO();
     }
 
-    // Show winner announcement
-    this.hudElements.centerText.setText(`PLAYER ${winner} WINS!`);
+    // 3. Flash effect - white flash on screen
+    const flash = this.add.rectangle(
+      this.cameras.main.centerX,
+      this.cameras.main.centerY,
+      this.cameras.main.width * 2,
+      this.cameras.main.height * 2,
+      0xffffff,
+      0.8
+    );
+    flash.setScrollFactor(0);
+    flash.setDepth(500);
 
-    // Pause input
-    this.inputSystem.setEnabled(false);
+    // Fade out the flash
+    this.tweens.add({
+      targets: flash,
+      alpha: 0,
+      duration: 300,
+      ease: 'Power2',
+      onComplete: () => flash.destroy(),
+    });
 
-    // Return to menu after delay
-    this.time.delayedCall(3000, () => {
+    // 4. Resume physics after brief freeze (150ms) to show knockback
+    this.time.delayedCall(150, () => {
+      this.matter.world.resume();
+
+      // Apply dramatic final knockback to loser
+      if (loser && loser.body) {
+        const knockbackDir = loser.playerNumber === 1 ? -1 : 1;
+        loser.applyKnockback({
+          x: knockbackDir * 0.025,
+          y: -0.02,
+        });
+      }
+    });
+
+    // 5. Show "K.O.!" text first, then winner text
+    this.hudElements.centerText.setText('K.O.!');
+    this.hudElements.centerText.setStyle({
+      fontSize: '80px',
+      color: '#ff0000',
+      stroke: '#000000',
+      strokeThickness: 6,
+    });
+
+    // 6. After knockback plays, show winner announcement
+    this.time.delayedCall(1200, () => {
+      this.hudElements.centerText.setText(`PLAYER ${winner} WINS!`);
+      this.hudElements.centerText.setStyle({
+        fontSize: '64px',
+        color: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 4,
+      });
+    });
+
+    // 7. Return to menu after full sequence plays
+    this.time.delayedCall(4000, () => {
       this.cleanup();
       this.scene.start('MainMenuScene');
     });

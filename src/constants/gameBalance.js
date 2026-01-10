@@ -163,7 +163,7 @@ export const CAMERA = {
 
   // Zoom limits
   zoomMin: 0.5, // Maximum zoom out (see more of arena)
-  zoomMax: 1.2, // Maximum zoom in (close combat)
+  zoomMax: 0.95, // Maximum zoom in - capped to prevent disorienting close-ups
   zoomDefault: 0.85, // Default zoom level
 
   // Zoom behavior
