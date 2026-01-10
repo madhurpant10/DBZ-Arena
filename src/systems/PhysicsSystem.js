@@ -58,25 +58,30 @@ export default class PhysicsSystem {
 
   /**
    * Creates world boundary walls for the expanded arena
-   * Uses soft boundaries with push-back forces instead of hard walls
+   * Walls are positioned so players can reach x=0 to x=arenaWidth
    */
   createWorldBounds() {
     // Use arena dimensions instead of camera viewport
     const arenaWidth = ARENA.width;
     const arenaHeight = ARENA.height;
-    const wallThickness = 50;
+    const wallThickness = 60;
+
+    // Calculate player body half-width to position walls correctly
+    // Player body width is 50, so half is 25
+    const playerHalfWidth = 25;
 
     const wallOptions = {
       friction: 0,
       frictionStatic: 0,
-      restitution: 0.2, // Slight bounce for softer feel
+      restitution: 0.1, // Slight bounce for softer feel
       collisionFilter: {
         category: this.categories.ground,
         mask: this.categories.player | this.categories.projectile,
       },
     };
 
-    // Left wall (at arena left edge)
+    // Left wall - player can reach x = playerHalfWidth (25)
+    // Wall inner edge at x = 0, so wall center at x = -wallThickness/2
     this.createStaticBody(
       -wallThickness / 2,
       arenaHeight / 2,
@@ -85,7 +90,8 @@ export default class PhysicsSystem {
       { label: 'wallLeft', ...wallOptions }
     );
 
-    // Right wall (at arena right edge)
+    // Right wall - player can reach x = arenaWidth - playerHalfWidth (2535)
+    // Wall inner edge at x = arenaWidth, so wall center at x = arenaWidth + wallThickness/2
     this.createStaticBody(
       arenaWidth + wallThickness / 2,
       arenaHeight / 2,
@@ -98,7 +104,7 @@ export default class PhysicsSystem {
     this.createStaticBody(
       arenaWidth / 2,
       -200 - wallThickness / 2, // Well above visible area
-      arenaWidth,
+      arenaWidth + wallThickness * 2, // Extend past side walls
       wallThickness,
       { label: 'ceiling', ...wallOptions }
     );

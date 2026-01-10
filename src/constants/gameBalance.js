@@ -130,10 +130,11 @@ export const ARENA = {
   groundHeight: 100, // Height of ground platform
   groundY: 1000, // Y position of ground (near bottom of arena)
 
-  // Spawn points (centered horizontally, on the ground level)
+  // Spawn points (symmetric around arena center x=1280)
+  // Each player spawns 400 units from center
   spawnPoints: {
-    player1: { x: 900, y: 850 },
-    player2: { x: 1660, y: 850 },
+    player1: { x: 880, y: 850 },  // 1280 - 400 = 880
+    player2: { x: 1680, y: 850 }, // 1280 + 400 = 1680
   },
 
   // Death zones
@@ -167,10 +168,10 @@ export const CAMERA = {
 
   // Zoom behavior
   zoomPadding: 200, // Extra padding around players when calculating zoom
-  zoomSmoothing: 0.03, // How quickly zoom changes (lower = slower/smoother)
+  zoomSmoothing: 0.12, // How quickly zoom changes (higher = faster/more responsive)
 
   // Position tracking
-  positionSmoothing: 0.05, // How quickly camera follows midpoint
+  positionSmoothing: 0.18, // How quickly camera follows midpoint (increased for faster tracking)
   verticalBias: 0.3, // Slight upward bias to show more sky during flight
 
   // Bounds padding (how close camera can get to arena edges)

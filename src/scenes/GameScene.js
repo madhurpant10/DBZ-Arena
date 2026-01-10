@@ -62,6 +62,7 @@ export default class GameScene extends Phaser.Scene {
     this.pauseHint = null;
     this.debugTexts = null;
     this.arenaBackground = null;
+    this.backgroundLayers = [];
 
     this.gameMode = data.mode || 'local1v1';
 
@@ -165,39 +166,168 @@ export default class GameScene extends Phaser.Scene {
 
   /**
    * Creates arena background visuals for the expanded arena
-   * Background spans the full arena size (larger than viewport)
+   * Features parallax layers for depth perception
    */
   createArenaBackground() {
     const arenaWidth = ARENA.width;
-    const arenaHeight = ARENA.height;
     const groundY = ARENA.groundY;
     const groundHeight = ARENA.groundHeight;
 
-    const bg = this.add.graphics();
+    // Store all background layers for camera ignore
+    this.backgroundLayers = [];
 
-    // Sky area (above ground) - gradient from dark blue to slightly lighter
-    bg.fillGradientStyle(0x0a0a1a, 0x0a0a1a, 0x1a1a2e, 0x1a1a2e, 1);
-    bg.fillRect(-200, -400, arenaWidth + 400, groundY + 400);
+    // === LAYER 1: Far background (stars/sky) - slowest parallax ===
+    // With scroll factor 0.1, we need 10x the coverage to prevent gaps at edges
+    // Camera can view ~2560 pixels wide at zoom 0.5, so parallax layer needs massive coverage
+    const farBg = this.add.graphics();
+    farBg.fillGradientStyle(0x050510, 0x050510, 0x0a0a1a, 0x0a0a1a, 1);
+    farBg.fillRect(-2000, -1000, arenaWidth + 4000, groundY + 2000);
 
-    // Ground area - darker ground color
-    bg.fillStyle(0x2d3436, 1);
-    bg.fillRect(0, groundY, arenaWidth, groundHeight + 500);
-
-    // Ground line (top of ground)
-    bg.lineStyle(3, 0x636e72, 1);
-    bg.lineBetween(0, groundY, arenaWidth, groundY);
-
-    // Add some depth lines for visual interest
-    bg.lineStyle(1, 0x3d4d56, 0.3);
-    for (let y = groundY + 20; y < groundY + groundHeight; y += 20) {
-      bg.lineBetween(0, y, arenaWidth, y);
+    // Add distant stars
+    for (let i = 0; i < 80; i++) {
+      const starX = Math.random() * (arenaWidth + 3000) - 1500;
+      const starY = Math.random() * (groundY + 500) - 800;
+      const starSize = Math.random() * 2 + 0.5;
+      const starAlpha = Math.random() * 0.5 + 0.2;
+      farBg.fillStyle(0xffffff, starAlpha);
+      farBg.fillCircle(starX, starY, starSize);
     }
 
-    // Set depth to be behind everything
-    bg.setDepth(-100);
+    farBg.setDepth(-150);
+    farBg.setScrollFactor(0.1, 0.1); // Moves very slowly - distant
+    this.backgroundLayers.push(farBg);
 
-    // Store reference for potential updates
-    this.arenaBackground = bg;
+    // === LAYER 2: Mid background (distant mountains) - medium parallax ===
+    // With scroll factor 0.3, need ~3x coverage for edge cases
+    const midBg = this.add.graphics();
+
+    // Distant mountain range (darker, further back)
+    midBg.fillStyle(0x1a1a2e, 0.8);
+    this.drawMountainRange(midBg, -1000, groundY, arenaWidth + 2000, 300, 8, 0.6);
+
+    midBg.setDepth(-130);
+    midBg.setScrollFactor(0.3, 0.4); // Moves slower than foreground
+    this.backgroundLayers.push(midBg);
+
+    // === LAYER 3: Near mountains - faster parallax ===
+    // With scroll factor 0.5, need ~2x coverage for edge cases
+    const nearMountains = this.add.graphics();
+
+    // Closer mountain range (slightly lighter)
+    nearMountains.fillStyle(0x2d2d44, 0.9);
+    this.drawMountainRange(nearMountains, -800, groundY, arenaWidth + 1600, 200, 12, 0.4);
+
+    nearMountains.setDepth(-120);
+    nearMountains.setScrollFactor(0.5, 0.6);
+    this.backgroundLayers.push(nearMountains);
+
+    // === LAYER 4: Foreground elements (ground, arena floor) - full scroll ===
+    // Full scroll factor means this matches camera movement, but still need extra padding for zoom
+    const foreground = this.add.graphics();
+
+    // Ground area - darker ground color (extended for zoom out)
+    foreground.fillStyle(0x2d3436, 1);
+    foreground.fillRect(-500, groundY, arenaWidth + 1000, groundHeight + 500);
+
+    // Ground line (top of ground) with glow effect
+    foreground.lineStyle(4, 0x4a5568, 1);
+    foreground.lineBetween(-500, groundY, arenaWidth + 500, groundY);
+    foreground.lineStyle(2, 0x718096, 0.6);
+    foreground.lineBetween(-500, groundY - 1, arenaWidth + 500, groundY - 1);
+
+    // Add some depth lines for visual interest
+    foreground.lineStyle(1, 0x3d4d56, 0.3);
+    for (let y = groundY + 20; y < groundY + groundHeight; y += 20) {
+      foreground.lineBetween(-500, y, arenaWidth + 500, y);
+    }
+
+    // Add subtle ground texture dots
+    for (let i = 0; i < 100; i++) {
+      const dotX = Math.random() * arenaWidth;
+      const dotY = groundY + Math.random() * 80 + 10;
+      foreground.fillStyle(0x4a5568, 0.3);
+      foreground.fillCircle(dotX, dotY, Math.random() * 3 + 1);
+    }
+
+    foreground.setDepth(-100);
+    foreground.setScrollFactor(1, 1); // Moves with camera
+    this.backgroundLayers.push(foreground);
+
+    // === Atmospheric effects layer (floating particles) ===
+    const atmosphere = this.add.graphics();
+
+    // Add floating dust/energy particles
+    for (let i = 0; i < 30; i++) {
+      const particleX = Math.random() * arenaWidth;
+      const particleY = Math.random() * groundY;
+      const particleSize = Math.random() * 4 + 1;
+      const particleAlpha = Math.random() * 0.15 + 0.05;
+
+      // Mix of colors for energy feel
+      const colors = [0x4a90d9, 0x9b59b6, 0xf39c12, 0x2ecc71];
+      const color = colors[Math.floor(Math.random() * colors.length)];
+
+      atmosphere.fillStyle(color, particleAlpha);
+      atmosphere.fillCircle(particleX, particleY, particleSize);
+    }
+
+    atmosphere.setDepth(-110);
+    atmosphere.setScrollFactor(0.7, 0.7);
+    this.backgroundLayers.push(atmosphere);
+
+    // Store main reference for backward compatibility
+    this.arenaBackground = foreground;
+  }
+
+  /**
+   * Draws a procedural mountain range
+   * @param {Phaser.GameObjects.Graphics} graphics - Graphics object to draw on
+   * @param {number} startX - Starting X position
+   * @param {number} baseY - Base Y position (ground level)
+   * @param {number} width - Width of the mountain range
+   * @param {number} maxHeight - Maximum peak height
+   * @param {number} peaks - Number of peaks
+   * @param {number} jaggedness - How jagged the mountains are (0-1)
+   */
+  drawMountainRange(graphics, startX, baseY, width, maxHeight, peaks, jaggedness) {
+    graphics.beginPath();
+    graphics.moveTo(startX, baseY);
+
+    const segmentWidth = width / (peaks * 4);
+    let x = startX;
+
+    for (let i = 0; i < peaks; i++) {
+      // Rising slope
+      const peakHeight = maxHeight * (0.5 + Math.random() * 0.5);
+      const peakX = x + segmentWidth * 2;
+
+      // Add some jagged points on the way up
+      const midX1 = x + segmentWidth * 0.7;
+      const midY1 = baseY - peakHeight * (0.3 + Math.random() * jaggedness * 0.3);
+      graphics.lineTo(midX1, midY1);
+
+      const midX2 = x + segmentWidth * 1.3;
+      const midY2 = baseY - peakHeight * (0.6 + Math.random() * jaggedness * 0.2);
+      graphics.lineTo(midX2, midY2);
+
+      // Peak
+      graphics.lineTo(peakX, baseY - peakHeight);
+
+      // Falling slope with jagged points
+      const midX3 = peakX + segmentWidth * 0.7;
+      const midY3 = baseY - peakHeight * (0.5 + Math.random() * jaggedness * 0.3);
+      graphics.lineTo(midX3, midY3);
+
+      const midX4 = peakX + segmentWidth * 1.5;
+      const midY4 = baseY - peakHeight * (0.2 + Math.random() * jaggedness * 0.2);
+      graphics.lineTo(midX4, midY4);
+
+      x = peakX + segmentWidth * 2;
+    }
+
+    graphics.lineTo(startX + width, baseY);
+    graphics.closePath();
+    graphics.fillPath();
   }
 
   /**
@@ -430,7 +560,14 @@ export default class GameScene extends Phaser.Scene {
 
     // UI camera only sees HUD (ignore everything else by setting to only render high depth)
     // We'll handle this by making the UI camera ignore world objects
-    if (this.arenaBackground) {
+
+    // Ignore all parallax background layers
+    if (this.backgroundLayers && this.backgroundLayers.length > 0) {
+      this.backgroundLayers.forEach(layer => {
+        this.uiCamera.ignore(layer);
+      });
+    } else if (this.arenaBackground) {
+      // Fallback for backward compatibility
       this.uiCamera.ignore(this.arenaBackground);
     }
 
@@ -771,6 +908,11 @@ export default class GameScene extends Phaser.Scene {
     const winner = playerNumber === 1 ? 2 : 1;
 
     logInfo(`GameScene: Player ${winner} wins!`);
+
+    // Camera shake on KO for impact
+    if (this.cameraSystem) {
+      this.cameraSystem.shakeOnKO();
+    }
 
     // Show winner announcement
     this.hudElements.centerText.setText(`PLAYER ${winner} WINS!`);

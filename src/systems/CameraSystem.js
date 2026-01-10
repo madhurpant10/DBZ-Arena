@@ -9,6 +9,8 @@ import { logInfo, logDebug } from '../utils/debug.js';
  * - Smooth interpolation for all movements
  * - Arena bounds clamping
  * - Vertical flight handling
+ * - Camera shake on impacts
+ * - Slow-motion effects
  */
 export default class CameraSystem {
   /**
@@ -28,6 +30,20 @@ export default class CameraSystem {
 
     // Player references (set via setPlayers)
     this.players = [];
+
+    // Camera shake state
+    this.shakeIntensity = 0;
+    this.shakeDuration = 0;
+    this.shakeElapsed = 0;
+    this.shakeOffsetX = 0;
+    this.shakeOffsetY = 0;
+
+    // Slow-motion state
+    this.slowMotionActive = false;
+    this.slowMotionDuration = 0;
+    this.slowMotionElapsed = 0;
+    this.slowMotionScale = 1.0;
+    this.originalTimeScale = 1.0;
 
     // Initialize camera
     this.setupCamera();
@@ -71,6 +87,9 @@ export default class CameraSystem {
   update(delta) {
     if (this.players.length < 2) return;
 
+    // Update slow-motion effect
+    this.updateSlowMotion(delta);
+
     // Get player positions
     const p1Pos = this.players[0].getPosition();
     const p2Pos = this.players[1].getPosition();
@@ -82,7 +101,10 @@ export default class CameraSystem {
     // Smoothly interpolate to targets
     this.interpolateCamera(delta);
 
-    // Apply to Phaser camera
+    // Update camera shake
+    this.updateShake(delta);
+
+    // Apply to Phaser camera (with shake offset)
     this.applyCamera();
   }
 
@@ -187,7 +209,11 @@ export default class CameraSystem {
    */
   applyCamera() {
     this.camera.setZoom(this.currentZoom);
-    this.camera.centerOn(this.currentX, this.currentY);
+    // Apply shake offset to camera position
+    this.camera.centerOn(
+      this.currentX + this.shakeOffsetX,
+      this.currentY + this.shakeOffsetY
+    );
   }
 
   /**
@@ -222,10 +248,147 @@ export default class CameraSystem {
     };
   }
 
+  // ==================== CAMERA SHAKE ====================
+
+  /**
+   * Triggers camera shake effect
+   * @param {number} intensity - Shake intensity in pixels (default: 8)
+   * @param {number} duration - Duration in milliseconds (default: 200)
+   */
+  shake(intensity = 8, duration = 200) {
+    // Don't override stronger shakes
+    if (this.shakeIntensity > intensity && this.shakeElapsed < this.shakeDuration) {
+      return;
+    }
+
+    this.shakeIntensity = intensity;
+    this.shakeDuration = duration;
+    this.shakeElapsed = 0;
+
+    logDebug(`CameraSystem: Shake triggered (intensity: ${intensity}, duration: ${duration}ms)`);
+  }
+
+  /**
+   * Updates camera shake effect
+   * @param {number} delta - Time since last frame in ms
+   */
+  updateShake(delta) {
+    if (this.shakeElapsed >= this.shakeDuration) {
+      this.shakeOffsetX = 0;
+      this.shakeOffsetY = 0;
+      this.shakeIntensity = 0;
+      return;
+    }
+
+    this.shakeElapsed += delta;
+
+    // Calculate shake decay (stronger at start, fades out)
+    const progress = this.shakeElapsed / this.shakeDuration;
+    const decay = 1 - progress;
+
+    // Scale intensity by zoom level (lower zoom = need more shake to be visible)
+    // At zoom 0.5, we need 2x intensity; at zoom 1.0, normal intensity
+    const zoomScale = 1 / this.currentZoom;
+    const currentIntensity = this.shakeIntensity * decay * zoomScale;
+
+    // Random shake offset using sine waves at different frequencies
+    // Higher frequency multiplier for more aggressive shake
+    const time = this.scene.time.now * 0.015;
+    this.shakeOffsetX = Math.sin(time * 17) * currentIntensity;
+    this.shakeOffsetY = Math.cos(time * 23) * currentIntensity * 0.7; // Less vertical
+  }
+
+  /**
+   * Preset shake for when a player takes damage
+   * Light shake for regular hits
+   */
+  shakeOnHit() {
+    this.shake(10, 120);
+  }
+
+  /**
+   * Preset shake for heavy impacts (knockback, powerful hits)
+   */
+  shakeOnHeavyHit() {
+    this.shake(18, 200);
+  }
+
+  /**
+   * Preset shake for KO - dramatic effect
+   */
+  shakeOnKO() {
+    this.shake(30, 350);
+  }
+
+  // ==================== SLOW MOTION ====================
+
+  /**
+   * Triggers slow-motion effect
+   * @param {number} scale - Time scale (0.1 = 10% speed, default: 0.3)
+   * @param {number} duration - Duration in real milliseconds (default: 500)
+   */
+  slowMotion(scale = 0.3, duration = 500) {
+    if (this.slowMotionActive) return;
+
+    this.slowMotionActive = true;
+    this.slowMotionScale = scale;
+    this.slowMotionDuration = duration;
+    this.slowMotionElapsed = 0;
+    this.originalTimeScale = this.scene.time.timeScale;
+
+    // Apply slow motion to the scene
+    this.scene.time.timeScale = scale;
+    this.scene.matter.world.engine.timing.timeScale = scale;
+
+    logDebug(`CameraSystem: Slow-motion started (scale: ${scale}, duration: ${duration}ms)`);
+  }
+
+  /**
+   * Updates slow-motion effect
+   * @param {number} delta - Time since last frame in ms (real time, not scaled)
+   */
+  updateSlowMotion(delta) {
+    if (!this.slowMotionActive) return;
+
+    // Use real delta time (not affected by timeScale)
+    const realDelta = delta / this.scene.time.timeScale;
+    this.slowMotionElapsed += realDelta;
+
+    if (this.slowMotionElapsed >= this.slowMotionDuration) {
+      // End slow motion
+      this.slowMotionActive = false;
+      this.scene.time.timeScale = this.originalTimeScale;
+      this.scene.matter.world.engine.timing.timeScale = this.originalTimeScale;
+
+      logDebug('CameraSystem: Slow-motion ended');
+    }
+  }
+
+  /**
+   * Triggers dramatic slow-mo for KO moments
+   */
+  slowMotionKO() {
+    this.slowMotion(0.2, 600);
+  }
+
+  /**
+   * Checks if slow motion is currently active
+   * @returns {boolean}
+   */
+  isSlowMotionActive() {
+    return this.slowMotionActive;
+  }
+
   /**
    * Cleans up camera system
    */
   destroy() {
+    // Restore time scale if slow motion was active
+    if (this.slowMotionActive) {
+      this.scene.time.timeScale = this.originalTimeScale;
+      this.scene.matter.world.engine.timing.timeScale = this.originalTimeScale;
+    }
+
     this.players = [];
     logInfo('CameraSystem: Destroyed');
   }

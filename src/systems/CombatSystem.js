@@ -207,6 +207,16 @@ export default class CombatSystem {
     // Apply knockback
     target.applyKnockback(knockbackForce);
 
+    // Trigger camera shake on hit (via scene's camera system)
+    if (this.scene.cameraSystem) {
+      // Heavier shake for stronger knockback
+      if (knockbackMagnitude > COMBAT_PHYSICS.knockbackForce * 1.5) {
+        this.scene.cameraSystem.shakeOnHeavyHit();
+      } else {
+        this.scene.cameraSystem.shakeOnHit();
+      }
+    }
+
     // Destroy the projectile
     projectile.destroy();
     this.projectiles.delete(projectile);
